@@ -11,14 +11,13 @@ This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://gith
 
 ## Features
 
-- **📦 Model Dropdown**: Select from 11+ pre-configured SDNQ models - no typing required!
-- **⚡ Auto-Download**: Models download automatically on first use from HuggingFace
-- **💾 Smart Caching**: Downloads cached and reused - load instantly after first download
-- **🚀 Massive VRAM Savings**: 50-75% reduction in memory usage
-- **🎨 Quality Maintained**: Minimal to no degradation in output quality
-- **⚛️ Multiple Quant Levels**: Support for int8, int6, uint4, and more
-- **🔌 Drop-in Compatibility**: Works with standard ComfyUI nodes (KSampler, etc.)
-- **🏃 Triton Acceleration**: Optional quantized matrix multiplication speedup
+- **📦 Model Dropdown**: Select from pre-configured SDNQ models from Disty0's collection
+- **⚡ Auto-Download**: Models download automatically from HuggingFace on first use
+- **💾 Smart Caching**: Download once, use forever
+- **🚀 VRAM Savings**: 50-75% memory reduction with quantization
+- **🎨 Quality Maintained**: Minimal quality loss (int8: ~99%, int4: ~95%)
+- **🔌 Compatible**: Works with standard ComfyUI nodes
+- **🏃 Optional Optimizations**: Triton acceleration, CPU offloading
 
 ---
 
@@ -46,85 +45,31 @@ Restart ComfyUI after installation.
 
 ## Quick Start
 
-### 1. Using the Node (Easy Mode - Dropdown Selection)
-
-**🆕 NEW: Just select and go!** No need to manually enter model names.
+### 1. Basic Usage
 
 1. Add the **SDNQ Model Loader** node (under `loaders/SDNQ`)
-2. **Select a model from the dropdown**:
-   - `FLUX.1-dev-qint8 [~12 GB]` - Best quality/VRAM balance ⭐ **Recommended**
-   - `FLUX.1-dev-qint6 [~9 GB]` - Great quality, lower VRAM
-   - `FLUX.1-dev-qint4 [~6 GB]` - Extreme VRAM savings
-   - `SD3.5-Large-qint8 [~10 GB]` - Latest Stable Diffusion
-   - `SDXL-base-qint8 [~6 GB]` - Classic high quality
-   - And more...
-3. Configure settings (defaults work great):
-   - **dtype**: `bfloat16` ✅ (recommended)
-   - **use_quantized_matmul**: `True` ✅ (faster inference with Triton)
-   - **cpu_offload**: `True` ✅ (saves VRAM)
-4. **First use**: The model will auto-download from HuggingFace Hub
-   - Progress shown in console
-   - Models are cached - only download once!
-   - Future loads are instant
-5. Connect outputs to standard ComfyUI nodes:
+2. **Select a model** from the dropdown (shows VRAM requirements)
+3. **First use**: Model auto-downloads from HuggingFace (cached for future use)
+4. Connect outputs:
    - `MODEL` → KSampler
    - `CLIP` → CLIP Text Encode
    - `VAE` → VAE Decode
 
-### 2. Using the Node (Advanced - Custom Models)
+**Defaults are optimized** - just select a model and go!
 
-For custom models or local paths:
+**Need more VRAM savings?** Enable `cpu_offload` (reduces speed, saves 60-70% VRAM)
 
-1. In the **model_selection** dropdown, choose `--Custom Model--`
-2. Enter in **custom_repo_or_path**:
-   - **HuggingFace repo ID**: `Disty0/your-model-qint8`
-   - **Local path**: `/path/to/downloaded/model`
-3. Configure other settings as above
+### 2. Custom Models
 
-### 3. Example Workflow
+Select `--Custom Model--` from dropdown, then enter:
+- **HuggingFace repo ID**: `Disty0/your-model-qint8`
+- **Local path**: `/path/to/model`
 
-```
-SDNQ Model Loader
-├─ model_selection: FLUX.1-dev-qint8 [~12 GB] ← Just select from dropdown!
-├─ dtype: bfloat16
-├─ use_quantized_matmul: ✓
-└─ cpu_offload: ✓
+### 3. Available Models
 
-     ↓ (MODEL, CLIP, VAE)
+Includes FLUX, FLUX.2, SD3.5, and SDXL models with int8/int6/int4 quantization levels.
 
-  KSampler ← (your prompts, seeds, etc.)
-
-     ↓ (LATENT)
-
-  VAE Decode ← (VAE from SDNQ loader)
-
-     ↓ (IMAGE)
-
- Save Image
-```
-
-### 4. Available Models
-
-**All models auto-download on first use:**
-
-**FLUX Models** (Highest quality):
-- FLUX.1-dev-qint8 (~12 GB VRAM, ~15 GB download) ⭐ **Recommended**
-- FLUX.1-dev-qint6 (~9 GB VRAM, ~12 GB download)
-- FLUX.1-dev-qint4 (~6 GB VRAM, ~9 GB download)
-- FLUX.1-schnell-qint8 (~12 GB VRAM) - Fast variant
-- FLUX.2-dev-qint8 (~12 GB VRAM, ~15 GB download) - Next-gen FLUX
-- FLUX.2-dev-qint4 (~6 GB VRAM, ~9 GB download) - Next-gen low VRAM
-
-**SD 3.5 Models** (Latest Stable Diffusion):
-- SD3.5-Large-qint8 (~10 GB VRAM, ~12 GB download)
-- SD3.5-Large-Turbo-qint8 (~10 GB VRAM) - Fast inference
-- SD3.5-Medium-qint8 (~6 GB VRAM, ~8 GB download)
-
-**SDXL Models** (Widely compatible):
-- SDXL-base-qint8 (~6 GB VRAM, ~7 GB download)
-- SDXL-base-qint4 (~4 GB VRAM, ~4 GB download)
-
-Browse all models: https://huggingface.co/collections/Disty0/sdnq
+Browse full collection: https://huggingface.co/collections/Disty0/sdnq
 
 ---
 
@@ -134,26 +79,16 @@ Browse all models: https://huggingface.co/collections/Disty0/sdnq
 
 **Category**: `loaders/SDNQ`
 
-**Inputs**:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| model_selection | DROPDOWN | FLUX.1-dev-qint8 | Select from 11+ pre-configured models with auto-download |
-| custom_repo_or_path | STRING | "" | Custom HuggingFace repo ID or local path (only when "Custom Model" selected) |
-| dtype | CHOICE | bfloat16 | Weight data type (bfloat16/float16/float32) |
-| use_quantized_matmul | BOOLEAN | True | Enable Triton quantized matmul (faster inference) |
-| cpu_offload | BOOLEAN | True | Offload model to CPU when not in use |
-| device | CHOICE | auto | Device placement (auto/cuda/cpu) |
+| model_selection | DROPDOWN | First model | Select pre-configured model (auto-downloads) |
+| custom_repo_or_path | STRING | "" | For custom models: repo ID or local path |
+| dtype | CHOICE | bfloat16 | Weight data type |
+| use_quantized_matmul | BOOLEAN | True | Triton optimization (Linux/WSL) |
+| cpu_offload | BOOLEAN | False | Offload to CPU RAM (slower, saves VRAM) |
+| device | CHOICE | auto | Device placement |
 
-**Outputs**:
-- `MODEL`: Quantized diffusion model (compatible with KSampler)
-- `CLIP`: Text encoder (compatible with CLIP Text Encode)
-- `VAE`: Variational autoencoder (compatible with VAE Decode/Encode)
-
-**How It Works**:
-1. Select a model from the dropdown (or choose "Custom Model")
-2. Model automatically downloads on first use (if not cached)
-3. Subsequent loads use the cached model (instant loading)
-4. Progress and status shown in ComfyUI console
+**Outputs**: `MODEL`, `CLIP`, `VAE` (compatible with standard ComfyUI nodes)
 
 ---
 
@@ -245,11 +180,11 @@ For now, use the [sdnq](https://github.com/Disty0/sdnq) package directly or use 
 - [x] Triton optimization support
 - [x] CPU offloading
 
-### Phase 2 (Current): ✅ Complete
-- [x] Model catalog with dropdown selection (11+ models including FLUX.2)
+### Phase 2: ✅ Complete
+- [x] Model catalog with dropdown selection
 - [x] Automatic model downloading with progress tracking
-- [x] Smart caching (download once, use forever)
-- [x] Model metadata display (VRAM, size, quality)
+- [x] Smart caching
+- [x] Model metadata display
 - [x] Custom model support
 
 ### Phase 3 (Planned):

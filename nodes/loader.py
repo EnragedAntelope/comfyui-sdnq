@@ -54,11 +54,11 @@ class SDNQModelLoader:
                 }),
                 "use_quantized_matmul": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Use quantized matrix multiplication (requires Triton)"
+                    "tooltip": "Enable Triton quantized matmul for faster inference (Linux/WSL only)"
                 }),
                 "cpu_offload": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Enable model CPU offloading to save VRAM"
+                    "default": False,
+                    "tooltip": "Offload model to CPU RAM to save VRAM (reduces speed, saves 60-70% VRAM)"
                 }),
             },
             "optional": {
