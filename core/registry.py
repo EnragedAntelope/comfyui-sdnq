@@ -59,6 +59,30 @@ SDNQ_MODEL_CATALOG = {
         "priority": 4
     },
 
+    # FLUX.2 Models - Next generation FLUX
+    "FLUX.2-dev-qint8": {
+        "repo_id": "Disty0/FLUX.2-dev-qint8",
+        "type": "FLUX",
+        "quant_level": "int8",
+        "vram_required": "~12 GB",
+        "vram_gb": 12,
+        "quality": "~99%",
+        "size_gb": "~15 GB",
+        "description": "FLUX.2-dev 8-bit - Next-gen FLUX model",
+        "priority": 5
+    },
+    "FLUX.2-dev-qint4": {
+        "repo_id": "Disty0/FLUX.2-dev-qint4",
+        "type": "FLUX",
+        "quant_level": "uint4",
+        "vram_required": "~6 GB",
+        "vram_gb": 6,
+        "quality": "~95%",
+        "size_gb": "~9 GB",
+        "description": "FLUX.2-dev 4-bit - Next-gen with extreme savings",
+        "priority": 6
+    },
+
     # SD 3.5 Models - Latest Stable Diffusion
     "SD3.5-Large-qint8": {
         "repo_id": "Disty0/stable-diffusion-3.5-large-qint8",
@@ -69,7 +93,7 @@ SDNQ_MODEL_CATALOG = {
         "quality": "~99%",
         "size_gb": "~12 GB",
         "description": "SD 3.5 Large 8-bit - Latest flagship model",
-        "priority": 5
+        "priority": 7
     },
     "SD3.5-Large-Turbo-qint8": {
         "repo_id": "Disty0/stable-diffusion-3.5-large-turbo-qint8",
@@ -80,7 +104,7 @@ SDNQ_MODEL_CATALOG = {
         "quality": "~99%",
         "size_gb": "~12 GB",
         "description": "SD 3.5 Large Turbo 8-bit - Fast inference",
-        "priority": 6
+        "priority": 8
     },
     "SD3.5-Medium-qint8": {
         "repo_id": "Disty0/stable-diffusion-3.5-medium-qint8",
@@ -91,7 +115,7 @@ SDNQ_MODEL_CATALOG = {
         "quality": "~99%",
         "size_gb": "~8 GB",
         "description": "SD 3.5 Medium 8-bit - Smaller, faster",
-        "priority": 7
+        "priority": 9
     },
 
     # SDXL Models - Stable and widely compatible
@@ -104,7 +128,7 @@ SDNQ_MODEL_CATALOG = {
         "quality": "~99%",
         "size_gb": "~7 GB",
         "description": "SDXL Base 1.0 8-bit - Classic high quality",
-        "priority": 8
+        "priority": 10
     },
     "SDXL-base-qint4": {
         "repo_id": "Disty0/stable-diffusion-xl-base-1.0-qint4",
@@ -115,7 +139,7 @@ SDNQ_MODEL_CATALOG = {
         "quality": "~95%",
         "size_gb": "~4 GB",
         "description": "SDXL Base 1.0 4-bit - Very low VRAM",
-        "priority": 9
+        "priority": 11
     },
 }
 

@@ -11,7 +11,7 @@ This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://gith
 
 ## Features
 
-- **📦 Model Dropdown**: Select from 9+ pre-configured SDNQ models - no typing required!
+- **📦 Model Dropdown**: Select from 11+ pre-configured SDNQ models - no typing required!
 - **⚡ Auto-Download**: Models download automatically on first use from HuggingFace
 - **💾 Smart Caching**: Downloads cached and reused - load instantly after first download
 - **🚀 Massive VRAM Savings**: 50-75% reduction in memory usage
@@ -108,10 +108,12 @@ SDNQ Model Loader
 **All models auto-download on first use:**
 
 **FLUX Models** (Highest quality):
-- FLUX.1-dev-qint8 (~12 GB VRAM, ~15 GB download)
+- FLUX.1-dev-qint8 (~12 GB VRAM, ~15 GB download) ⭐ **Recommended**
 - FLUX.1-dev-qint6 (~9 GB VRAM, ~12 GB download)
 - FLUX.1-dev-qint4 (~6 GB VRAM, ~9 GB download)
 - FLUX.1-schnell-qint8 (~12 GB VRAM) - Fast variant
+- FLUX.2-dev-qint8 (~12 GB VRAM, ~15 GB download) - Next-gen FLUX
+- FLUX.2-dev-qint4 (~6 GB VRAM, ~9 GB download) - Next-gen low VRAM
 
 **SD 3.5 Models** (Latest Stable Diffusion):
 - SD3.5-Large-qint8 (~10 GB VRAM, ~12 GB download)
@@ -135,7 +137,7 @@ Browse all models: https://huggingface.co/collections/Disty0/sdnq
 **Inputs**:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| model_selection | DROPDOWN | FLUX.1-dev-qint8 | Select from 9+ pre-configured models with auto-download |
+| model_selection | DROPDOWN | FLUX.1-dev-qint8 | Select from 11+ pre-configured models with auto-download |
 | custom_repo_or_path | STRING | "" | Custom HuggingFace repo ID or local path (only when "Custom Model" selected) |
 | dtype | CHOICE | bfloat16 | Weight data type (bfloat16/float16/float32) |
 | use_quantized_matmul | BOOLEAN | True | Enable Triton quantized matmul (faster inference) |
@@ -211,6 +213,19 @@ Triton is not available on native Windows. Use WSL2 for Triton support.
 
 The model may not be in the expected diffusers format. SDNQ models should have a standard diffusers directory structure with `model_index.json`.
 
+### ComfyUI Weight Streaming Compatibility
+
+**Important**: Our `cpu_offload` option uses diffusers/Accelerate offloading, which operates independently from ComfyUI's weight streaming system.
+
+**What this means**:
+- ✅ `cpu_offload=True` works great for VRAM savings (uses diffusers' system)
+- ❓ ComfyUI's native weight streaming likely won't work with our wrappers (different architecture)
+- 🔧 `cpu_offload=False` keeps the model fully in VRAM (fastest, but uses more VRAM)
+
+**Recommendation**: Use the built-in `cpu_offload` option for VRAM management. It's well-tested with diffusers models and provides 60-70% VRAM reduction.
+
+See [WEIGHT_STREAMING.md](WEIGHT_STREAMING.md) for technical details.
+
 ---
 
 ## Quantizing Your Own Models
@@ -231,7 +246,7 @@ For now, use the [sdnq](https://github.com/Disty0/sdnq) package directly or use 
 - [x] CPU offloading
 
 ### Phase 2 (Current): ✅ Complete
-- [x] Model catalog with dropdown selection (9+ models)
+- [x] Model catalog with dropdown selection (11+ models including FLUX.2)
 - [x] Automatic model downloading with progress tracking
 - [x] Smart caching (download once, use forever)
 - [x] Model metadata display (VRAM, size, quality)
