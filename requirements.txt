@@ -1,0 +1,20 @@
+# ComfyUI-SDNQ Requirements
+# SDNQ quantization engine
+sdnq @ git+https://github.com/Disty0/sdnq.git
+
+# Diffusers and transformers
+# Note: FLUX.2 and newer models require diffusers>=0.35.2
+diffusers>=0.35.2
+transformers>=4.40.0
+
+# HuggingFace Hub integration
+huggingface-hub>=0.20.0
+
+# Model serialization
+safetensors>=0.4.0
+
+# PyTorch (required but usually pre-installed with ComfyUI)
+torch>=2.0.0
+
+# Acceleration utilities
+accelerate>=0.25.0
