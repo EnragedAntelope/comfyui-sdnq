@@ -45,6 +45,27 @@ class SDNQModelWrapper:
     def get_pipeline(self):
         """Return the full pipeline for generation"""
         return self.pipeline
+    
+    def get_model_object(self, name: str):
+        """
+        Get a model object/attribute by name (ComfyUI MODEL interface).
+        
+        Args:
+            name: Attribute name to retrieve
+            
+        Returns:
+            The requested attribute or None
+        """
+        # Check pipeline first
+        if hasattr(self.pipeline, name):
+            return getattr(self.pipeline, name)
+        
+        # Then check model component
+        if hasattr(self.model, name):
+            return getattr(self.model, name)
+        
+        # Return None for unknown attributes
+        return None
 
 
 class SDNQCLIPWrapper:
