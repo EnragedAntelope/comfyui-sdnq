@@ -129,19 +129,6 @@ class SDNQModelLoader:
             model_path = repo_id
 
             print("\n" + "="*60)
-            print("SDNQ Model Loader")
-            print("="*60)
-            print(f"Selected: {model_selection}")
-            if model_info:
-                print(f"Type: {model_info['type']}")
-                print(f"Quantization: {model_info['quant_level']}")
-                print(f"VRAM Required: {model_info['vram_required']}")
-                print(f"Quality: {model_info['quality']}")
-                print(f"Download Size: {model_info.get('size_gb', 'Unknown')}")
-
-
-            # Check if already cached
-            is_cached = check_model_cached(repo_id)
             if is_cached:
                 print(f"✓ Model is already cached")
                 cached_path = get_cached_model_path(repo_id)
@@ -174,6 +161,16 @@ class SDNQModelLoader:
             # SDNQ handles all quantization automatically through diffusers integration
             print("Loading model pipeline...")
             print("Note: If the progress bar appears stuck, it is likely verifying files or downloading large chunks. Please wait.")
+
+            # Monkeypatch/Alias Flux2 classes to Flux classes if they don't exist
+            # This fixes the "AttributeError: module diffusers has no attribute Flux2Transformer2DModel"
+            if not hasattr(diffusers, "Flux2Pipeline") and hasattr(diffusers, "FluxPipeline"):
+                print("Patching diffusers: Aliasing Flux2Pipeline -> FluxPipeline")
+                diffusers.Flux2Pipeline = diffusers.FluxPipeline
+            
+            if not hasattr(diffusers, "Flux2Transformer2DModel") and hasattr(diffusers, "FluxTransformer2DModel"):
+                print("Patching diffusers: Aliasing Flux2Transformer2DModel -> FluxTransformer2DModel")
+                diffusers.Flux2Transformer2DModel = diffusers.FluxTransformer2DModel
 
             # Use DiffusionPipeline to support custom pipelines like Flux2Pipeline
             try:
