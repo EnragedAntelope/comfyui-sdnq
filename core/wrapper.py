@@ -17,20 +17,41 @@ class SDNQModelWrapper:
     This wrapper provides the interface expected by ComfyUI's sampling nodes.
     """
 
-    def __init__(self, pipeline, model_component):
+    def __init__(self, pipeline, model_component, model_type=None):
         """
         Args:
             pipeline: The full diffusers pipeline
             model_component: The transformer or unet component from the pipeline
+            model_type: Explicitly provided model type (e.g. "FLUX", "SDXL")
         """
         self.pipeline = pipeline
         self.model = model_component
-        self.model_type = self._detect_model_type()
+        # Use explicit type if provided, otherwise detect
+        if model_type:
+            self.model_type = self._normalize_model_type(model_type)
+        else:
+            self.model_type = self._detect_model_type()
+
+    def _normalize_model_type(self, model_type: str) -> str:
+        """Normalize registry types to internal types"""
+        if not model_type:
+            return "unknown"
+        model_type = model_type.upper()
+        if "FLUX" in model_type:
+            return "flux"
+        elif "SD3" in model_type:
+            return "sd3"
+        elif "SDXL" in model_type:
+            return "sdxl"
+        return "unknown"
 
     def _detect_model_type(self) -> str:
-        """Detect the type of model (FLUX, SD3, SDXL, etc.)"""
+        """Fallback detection if type not provided"""
         if hasattr(self.pipeline, 'transformer'):
-            # FLUX or SD3 style
+            # Check transformer class name to distinguish Flux vs SD3
+            transformer_class = self.pipeline.transformer.__class__.__name__
+            if "SD3" in transformer_class:
+                return "sd3"
             return "flux"
         elif hasattr(self.pipeline, 'unet'):
             # SDXL/SD1.5 style
@@ -45,6 +66,27 @@ class SDNQModelWrapper:
     def get_pipeline(self):
         """Return the full pipeline for generation"""
         return self.pipeline
+    
+    def get_model_object(self, name: str):
+        """
+        Get a model object/attribute by name (ComfyUI MODEL interface).
+        
+        Args:
+            name: Attribute name to retrieve
+            
+        Returns:
+            The requested attribute or None
+        """
+        # Check pipeline first
+        if hasattr(self.pipeline, name):
+            return getattr(self.pipeline, name)
+        
+        # Then check model component
+        if hasattr(self.model, name):
+            return getattr(self.model, name)
+        
+        # Return None for unknown attributes
+        return None
 
 
 class SDNQCLIPWrapper:
@@ -65,9 +107,150 @@ class SDNQCLIPWrapper:
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
 
+    def tokenize(self, text, images=None, **kwargs):
+        """
+        Tokenize text (and optionally images) for encoding.
+        
+        This matches ComfyUI's CLIP.tokenize() interface.
+        ComfyUI's standard CLIPTextEncode only passes text, but custom nodes
+        may pass images for multimodal models.
+        
+        Args:
+            text: Input text prompt
+            images: Optional images for multimodal processors (e.g., Flux 2 with vision)
+            **kwargs: Additional tokenizer options
+        
+        Returns:
+            Tokenized output (format depends on tokenizer type)
+        """
+        # Handle multimodal processors (like PixtralProcessor for Flux 2)
+        # These CAN accept both text and images, but images are optional
+        if hasattr(self.tokenizer, 'tokenizer'):
+            # This is a composite processor (has .tokenizer attribute for text-only)
+            # Check if images were provided
+            if images is not None:
+                # Use full multimodal processor
+                return self.tokenizer(text=text, images=images, return_tensors="pt", padding=True, **kwargs)
+            else:
+                # Use text-only tokenizer component
+                text_tokenizer = self.tokenizer.tokenizer
+                return text_tokenizer(text, return_tensors="pt", padding=True, **kwargs)
+        elif hasattr(self.tokenizer, '__call__'):
+            # Standard diffusers tokenizer (text-only)
+            return self.tokenizer(text, return_tensors="pt", padding=True, **kwargs)
+        else:
+            raise NotImplementedError(f"Tokenizer type {type(self.tokenizer)} not supported")
+
+    def encode_from_tokens(self, tokens, return_pooled=False, return_dict=False, **kwargs):
+        """
+        Encode tokens to embeddings.
+        
+        This matches ComfyUI's CLIP.encode_from_tokens() interface.
+        
+        Args:
+            tokens: Tokenized input (BatchEncoding or dict with tensors)
+            return_pooled: Whether to return pooled output (bool or "unprojected")
+            return_dict: Whether to return a dictionary instead of tuple
+            **kwargs: Additional encoding options
+        
+        Returns:
+            Encoded embeddings (and optionally pooled output)
+        """
+        # Extract tensors from BatchEncoding or dict
+        # BatchEncoding is dict-like but we need to extract only the tensor keys
+        if hasattr(tokens, 'data'):
+            # BatchEncoding object - extract the underlying dict
+            token_dict = tokens.data
+        elif isinstance(tokens, dict):
+            token_dict = tokens
+        else:
+            # Assume it's raw input_ids tensor
+            token_dict = {"input_ids": tokens}
+        
+        # Move tensors to text encoder's device and prepare inputs
+        # Only pass keys that the text encoder expects (input_ids, attention_mask, etc.)
+        inputs = {}
+        for key in ['input_ids', 'attention_mask', 'pixel_values']:
+            if key in token_dict:
+                value = token_dict[key]
+                if hasattr(value, 'to'):
+                    inputs[key] = value.to(self.text_encoder.device)
+                else:
+                    inputs[key] = value
+        
+        # Encode using text encoder
+        outputs = self.text_encoder(**inputs)
+        
+        # Extract embeddings and pooled output
+        # Different text encoders have different output formats
+        if hasattr(outputs, 'last_hidden_state'):
+            # Standard output (CLIP, T5, etc.)
+            cond = outputs.last_hidden_state
+        elif hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+            # Some models return hidden_states as a tuple
+            if isinstance(outputs.hidden_states, tuple):
+                cond = outputs.hidden_states[-1]
+            else:
+                cond = outputs.hidden_states
+        elif hasattr(outputs, 'logits'):
+            # Causal LM output (Mistral3, etc.) - use logits as embeddings
+            cond = outputs.logits
+        else:
+            raise AttributeError(f"Text encoder output has no recognizable embedding attribute. Available: {dir(outputs)}")
+        
+        if hasattr(outputs, 'pooler_output') and outputs.pooler_output is not None:
+            pooled = outputs.pooler_output
+        elif hasattr(outputs, 'pooled_output') and outputs.pooled_output is not None:
+            pooled = outputs.pooled_output
+        else:
+            # No pooled output, use first token as fallback
+            pooled = cond[:, 0]
+        
+        # Return based on requested format
+        if return_dict:
+            out = {"cond": cond, "pooled_output": pooled}
+            return out
+        elif return_pooled:
+            return cond, pooled
+        else:
+            return cond
+
+    def encode_from_tokens_scheduled(self, tokens, unprojected=False, add_dict=None, show_pbar=True):
+        """
+        Encode tokens with optional scheduling support.
+        
+        This matches ComfyUI's CLIP.encode_from_tokens_scheduled() interface.
+        For diffusers models, we don't have the scheduling/hooks infrastructure,
+        so we just call encode_from_tokens and format the output appropriately.
+        
+        Args:
+            tokens: Tokenized input
+            unprojected: Whether to use unprojected pooled output
+            add_dict: Additional dictionary to merge into output
+            show_pbar: Whether to show progress bar (ignored for simple encoding)
+        
+        Returns:
+            List of [cond, pooled_dict] pairs (ComfyUI format)
+        """
+        if add_dict is None:
+            add_dict = {}
+        
+        # Encode tokens
+        return_pooled = "unprojected" if unprojected else True
+        pooled_dict = self.encode_from_tokens(tokens, return_pooled=return_pooled, return_dict=True)
+        
+        # Extract cond and create output format
+        cond = pooled_dict.pop("cond")
+        
+        # Merge in any additional dict items
+        pooled_dict.update(add_dict)
+        
+        # Return in ComfyUI's expected format: list of [cond, pooled_dict] pairs
+        return [[cond, pooled_dict]]
+
     def encode(self, text: str) -> torch.Tensor:
         """
-        Encode text to embeddings.
+        Encode text to embeddings in one step (convenience method).
 
         Args:
             text: Input text prompt
@@ -75,13 +258,8 @@ class SDNQCLIPWrapper:
         Returns:
             Text embeddings tensor
         """
-        # Use the pipeline's encoding mechanism
-        if hasattr(self.pipeline, 'encode_prompt'):
-            return self.pipeline.encode_prompt(text)
-        else:
-            # Fallback to direct tokenizer/encoder
-            inputs = self.tokenizer(text, return_tensors="pt", padding=True)
-            return self.text_encoder(**inputs).last_hidden_state
+        tokens = self.tokenize(text, return_tensors="pt", padding=True)
+        return self.encode_from_tokens(tokens)
 
     def get_text_encoder(self):
         """Return the underlying text encoder"""
@@ -141,12 +319,13 @@ class SDNQVAEWrapper:
         return self.vae
 
 
-def wrap_pipeline_components(pipeline) -> Tuple[SDNQModelWrapper, SDNQCLIPWrapper, SDNQVAEWrapper]:
+def wrap_pipeline_components(pipeline, model_type=None) -> Tuple[SDNQModelWrapper, SDNQCLIPWrapper, SDNQVAEWrapper]:
     """
-    Wrap a diffusers pipeline into ComfyUI-compatible components.
+    Wrap diffusers pipeline components into ComfyUI-compatible objects.
 
     Args:
-        pipeline: A diffusers pipeline (FluxPipeline, StableDiffusion3Pipeline, etc.)
+        pipeline: The loaded diffusers pipeline
+        model_type: Optional explicit model type (e.g. "FLUX", "SDXL")
 
     Returns:
         Tuple of (model_wrapper, clip_wrapper, vae_wrapper) compatible with ComfyUI types
@@ -175,7 +354,7 @@ def wrap_pipeline_components(pipeline) -> Tuple[SDNQModelWrapper, SDNQCLIPWrappe
         raise ValueError("Pipeline missing vae component")
 
     # Create wrappers
-    model_wrapper = SDNQModelWrapper(pipeline, model_component)
+    model_wrapper = SDNQModelWrapper(pipeline, model_component, model_type=model_type)
     clip_wrapper = SDNQCLIPWrapper(pipeline, text_encoder, tokenizer)
     vae_wrapper = SDNQVAEWrapper(vae)
 

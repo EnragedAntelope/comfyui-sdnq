@@ -184,9 +184,6 @@ class SDNQModelLoader:
             model_info = get_model_info(model_selection)
             model_path = repo_id
 
-            print("\n" + "="*60)
-            print("SDNQ Model Loader")
-            print("="*60)
             print(f"Selected: {model_selection}")
             if model_info:
                 print(f"Type: {model_info['type']}")
@@ -237,6 +234,7 @@ class SDNQModelLoader:
                 torch_dtype=torch_dtype,
                 local_files_only=is_local,
             )
+
 
             print(f"Pipeline loaded: {type(pipeline).__name__}")
 
