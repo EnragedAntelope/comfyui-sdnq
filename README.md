@@ -36,8 +36,15 @@ This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://gith
 cd ComfyUI/custom_nodes/
 git clone https://github.com/EnragedAntelope/comfyui-sdnq.git
 cd comfyui-sdnq
+
+# IMPORTANT: Install latest diffusers from git (required for Flux 2 and Z-Image)
+pip install git+https://github.com/huggingface/diffusers.git
+
+# Install other dependencies
 pip install -r requirements.txt
 ```
+
+> **⚠️ CRITICAL**: You MUST install diffusers from git to support Flux 2, Z-Image, and other latest models. The PyPI version does not include these features yet.
 
 Restart ComfyUI after installation.
 
@@ -245,14 +252,11 @@ This project integrates with [SDNQ by Disty0](https://github.com/Disty0/sdnq). P
 
 ---
 
-## Links
+## Credits
 
-- **This Repository**: https://github.com/EnragedAntelope/comfyui-sdnq
-- **SDNQ Engine**: https://github.com/Disty0/sdnq
-- **Pre-quantized Models**: https://huggingface.co/collections/Disty0/sdnq
-- **SDNQ Documentation**: https://github.com/vladmandic/sdnext/wiki/SDNQ-Quantization
-- **ComfyUI**: https://github.com/comfyanonymous/ComfyUI
+### SDNQ - SD.Next Quantization Engine
+- **Author**: Disty0
+- **Repository**: https://github.com/Disty0/sdnq
+- **Pre-quantized models**: https://huggingface.co/collections/Disty0/sdnq
 
----
-
-**Made possible by [Disty0's SDNQ](https://github.com/Disty0/sdnq)** - bringing large models to consumer hardware!
+This node pack provides ComfyUI integration for SDNQ. All quantization technology is developed and maintained by Disty0.
