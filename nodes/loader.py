@@ -16,27 +16,7 @@ from sdnq.loader import apply_sdnq_options_to_model
 from sdnq.common import use_torch_compile as triton_is_available
 
 import diffusers
-
-# AutoPipeline is available in diffusers>=0.30.0
-# Fall back to AutoPipelineForText2Image for older versions
-try:
-    from diffusers import AutoPipeline
-    AUTOPIPELINE_AVAILABLE = True
-except ImportError:
-    # Fallback for diffusers < 0.30.0
-    from diffusers import AutoPipelineForText2Image as AutoPipeline
-    AUTOPIPELINE_AVAILABLE = False
-    print("\n" + "="*60)
-    print("ComfyUI-SDNQ: Compatibility Mode")
-    print("="*60)
-    print("diffusers.AutoPipeline not available (requires diffusers>=0.30.0)")
-    print("Running in compatibility mode:")
-    print("  ✓ Image models (FLUX.1, Qwen, etc.) will work")
-    print("  ✗ Video models (Wan2.2) may fail")
-    print("  ✗ Multimodal models may have issues")
-    print("\nTo enable full support, upgrade diffusers:")
-    print("  pip install --upgrade diffusers>=0.35.2")
-    print("="*60 + "\n")
+from diffusers import AutoPipeline
 
 # Import ComfyUI modules for native model loading
 import comfy.sd
@@ -251,13 +231,6 @@ class SDNQModelLoader:
             # SDNQ pre-quantized models will be loaded with quantization preserved
             # AutoPipeline auto-detects the correct pipeline type (T2I, I2V, T2V, multimodal, etc.)
             print("Loading SDNQ model pipeline...")
-
-            # Warn if loading video/multimodal models with older diffusers
-            if not AUTOPIPELINE_AVAILABLE and model_info:
-                model_type = model_info.get('type', '')
-                if 'Video' in model_info.get('description', '') or 'I2V' in model_selection or 'T2V' in model_selection:
-                    print(f"WARNING: Loading video model '{model_selection}' with diffusers < 0.30.0")
-                    print("This model may fail to load. Please upgrade: pip install --upgrade diffusers>=0.35.2")
 
             pipeline = AutoPipeline.from_pretrained(
                 model_path,
