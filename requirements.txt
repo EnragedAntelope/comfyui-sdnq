@@ -3,6 +3,8 @@
 sdnq @ git+https://github.com/Disty0/sdnq.git
 
 # Diffusers and transformers
+# Note: FLUX.2 models require diffusers>=0.35.0
+# For best compatibility, install latest: pip install git+https://github.com/huggingface/diffusers
 diffusers>=0.30.0
 transformers>=4.40.0
 

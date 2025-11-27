@@ -172,6 +172,13 @@ class SDNQModelLoader:
             # The SDNQConfig import above registers SDNQ into diffusers
             print("Loading model pipeline...")
 
+            # Check if this is a FLUX.2 model and if diffusers supports it
+            model_info_dict = get_model_info(model_name) if model_name and model_name != "Custom" else None
+            is_flux2 = model_info_dict and model_info_dict.get("type") == "FLUX2"
+
+            # Check if AutoencoderKLFlux2 exists (needed for FLUX.2)
+            has_flux2_support = hasattr(diffusers, 'AutoencoderKLFlux2') or hasattr(diffusers.models, 'AutoencoderKLFlux2')
+
             # Try AutoPipeline first, fall back to FluxPipeline for FLUX.2 models
             try:
                 pipeline = diffusers.AutoPipelineForText2Image.from_pretrained(
@@ -179,9 +186,33 @@ class SDNQModelLoader:
                     torch_dtype=torch_dtype,
                     local_files_only=is_local,
                 )
-            except ValueError as e:
+            except (ValueError, AttributeError) as e:
+                error_str = str(e)
+
                 # Handle FLUX.2 models that use Flux2Pipeline (not yet in AutoPipeline mapping)
-                if "Flux2Pipeline" in str(e) or "can't find a pipeline" in str(e):
+                if "Flux2Pipeline" in error_str or "can't find a pipeline" in error_str or "AutoencoderKLFlux2" in error_str:
+                    if not has_flux2_support and ("AutoencoderKLFlux2" in error_str or is_flux2):
+                        # diffusers version too old for FLUX.2
+                        print(f"\n{'='*60}")
+                        print("⚠ FLUX.2 Model Requires Newer Diffusers Version")
+                        print(f"{'='*60}")
+                        print(f"This model needs diffusers>=0.35.0 with FLUX.2 support.")
+                        print(f"")
+                        print(f"To fix:")
+                        print(f"1. Update diffusers:")
+                        print(f"   pip install diffusers>=0.35.0 --upgrade")
+                        print(f"   OR")
+                        print(f"   pip install git+https://github.com/huggingface/diffusers")
+                        print(f"")
+                        print(f"2. Restart ComfyUI")
+                        print(f"")
+                        print(f"Alternative: Use FLUX.1 models instead (fully supported)")
+                        print(f"{'='*60}\n")
+                        raise RuntimeError(
+                            f"FLUX.2 models require diffusers>=0.35.0 (AutoencoderKLFlux2 not found). "
+                            f"Please upgrade diffusers or use FLUX.1 models."
+                        ) from e
+
                     print("AutoPipeline failed, trying FluxPipeline for FLUX.2 compatibility...")
                     pipeline = diffusers.FluxPipeline.from_pretrained(
                         model_path,
