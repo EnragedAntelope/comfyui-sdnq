@@ -65,22 +65,37 @@ class SDNQCLIPWrapper:
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
 
-    def tokenize(self, text, **kwargs):
+    def tokenize(self, text, images=None, **kwargs):
         """
-        Tokenize text for encoding.
+        Tokenize text (and optionally images) for encoding.
         
         This matches ComfyUI's CLIP.tokenize() interface.
+        ComfyUI's standard CLIPTextEncode only passes text, but custom nodes
+        may pass images for multimodal models.
         
         Args:
             text: Input text prompt
+            images: Optional images for multimodal processors (e.g., Flux 2 with vision)
             **kwargs: Additional tokenizer options
         
         Returns:
             Tokenized output (format depends on tokenizer type)
         """
-        # For diffusers tokenizers, return the tokenized output
-        if hasattr(self.tokenizer, '__call__'):
-            return self.tokenizer(text, **kwargs)
+        # Handle multimodal processors (like PixtralProcessor for Flux 2)
+        # These CAN accept both text and images, but images are optional
+        if hasattr(self.tokenizer, 'tokenizer'):
+            # This is a composite processor (has .tokenizer attribute for text-only)
+            # Check if images were provided
+            if images is not None:
+                # Use full multimodal processor
+                return self.tokenizer(text=text, images=images, return_tensors="pt", padding=True, **kwargs)
+            else:
+                # Use text-only tokenizer component
+                text_tokenizer = self.tokenizer.tokenizer
+                return text_tokenizer(text, return_tensors="pt", padding=True, **kwargs)
+        elif hasattr(self.tokenizer, '__call__'):
+            # Standard diffusers tokenizer (text-only)
+            return self.tokenizer(text, return_tensors="pt", padding=True, **kwargs)
         else:
             raise NotImplementedError(f"Tokenizer type {type(self.tokenizer)} not supported")
 
