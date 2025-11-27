@@ -1,20 +1,25 @@
-# ComfyUI-SDNQ Requirements
-# SDNQ quantization engine
-sdnq @ git+https://github.com/Disty0/sdnq.git
+# SDNQ quantization engine (includes quantized models support)
+# Note: Install from GitHub for latest features
+sdnq>=0.1.0
 
-# Diffusers and transformers
-# Note: FLUX.2 and newer models require diffusers>=0.35.2
-diffusers>=0.35.2
-transformers>=4.40.0
+# Diffusers library - MUST install from git for Flux 2 / Z-Image support
+# Install via: pip install git+https://github.com/huggingface/diffusers.git
+# Note: PyPI version does not yet include Flux 2, Z-Image, and other latest models
 
-# HuggingFace Hub integration
-huggingface-hub>=0.20.0
+# Transformers for text encoding (latest stable)
+transformers>=4.57.0
 
-# Model serialization
-safetensors>=0.4.0
+# HuggingFace Hub integration (latest stable)
+huggingface-hub>=1.1.0
+
+# HuggingFace XET for faster downloads (optional but highly recommended)
+hf-xet>=1.3.0
+
+# Model serialization (latest stable)
+safetensors>=0.7.0
 
 # PyTorch (required but usually pre-installed with ComfyUI)
 torch>=2.0.0
 
-# Acceleration utilities
-accelerate>=0.25.0
+# Acceleration utilities (latest stable)
+accelerate>=1.12.0
