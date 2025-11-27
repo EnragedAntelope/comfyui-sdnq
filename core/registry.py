@@ -90,7 +90,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "~32 GB",
         "description": "FLUX.2-dev 4-bit SVD - Next-gen (Large Download!)",
         "priority": 7
     },
@@ -103,7 +102,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Qwen-Image 4-bit SVD - Text-to-Image",
         "priority": 8
     },
@@ -114,7 +112,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Qwen-Image-Lightning 4-bit SVD - Fast T2I",
         "priority": 9
     },
@@ -125,7 +122,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Qwen-Image-Edit-2509 4-bit SVD - Image-to-Image",
         "priority": 10
     },
@@ -136,7 +132,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Qwen-Image-Edit-Lightning 4-bit SVD - Fast I2I",
         "priority": 11
     },
@@ -147,7 +142,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Qwen-Image-Edit 4-bit SVD - Image-to-Image",
         "priority": 12
     },
@@ -158,7 +152,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~8 GB",
         "vram_gb": 8,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Qwen3-VL-32B 4-bit SVD - Image-to-Text (18B params)",
         "priority": 13
     },
@@ -171,7 +164,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Z-Image-Turbo 4-bit SVD - Fast T2I",
         "priority": 14
     },
@@ -184,7 +176,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~6 GB",
         "vram_gb": 6,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Chroma1-HD 4-bit SVD - Text-to-Image",
         "priority": 15
     },
@@ -195,7 +186,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~7 GB",
         "vram_gb": 7,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "ChronoEdit-14B 4-bit SVD - Image editing",
         "priority": 16
     },
@@ -206,7 +196,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~12 GB",
         "vram_gb": 12,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "HunyuanImage3 4-bit SVD - Text-to-Image (45B params)",
         "priority": 17
     },
@@ -219,7 +208,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~4 GB",
         "vram_gb": 4,
         "quality": "~95%",
-        "size_gb": "~4 GB",
         "description": "NoobAI-XL v1.0 4-bit SVD - Anime/illustration",
         "priority": 18
     },
@@ -230,7 +218,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~4 GB",
         "vram_gb": 4,
         "quality": "~95%",
-        "size_gb": "~4 GB",
         "description": "NoobAI-XL v1.1 4-bit SVD - Anime/illustration",
         "priority": 19
     },
@@ -243,7 +230,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~8 GB",
         "vram_gb": 8,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Wan2.2-I2V-A14B 4-bit SVD - Image-to-Video",
         "priority": 20
     },
@@ -254,7 +240,6 @@ SDNQ_MODEL_CATALOG = {
         "vram_required": "~8 GB",
         "vram_gb": 8,
         "quality": "~95%",
-        "size_gb": "Unknown",
         "description": "Wan2.2-T2V-A14B 4-bit SVD - Text-to-Video",
         "priority": 21
     },

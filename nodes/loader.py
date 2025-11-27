@@ -137,7 +137,8 @@ class SDNQModelLoader:
                 print(f"Quantization: {model_info['quant_level']}")
                 print(f"VRAM Required: {model_info['vram_required']}")
                 print(f"Quality: {model_info['quality']}")
-                print(f"Download Size: {model_info['size_gb']}")
+                print(f"Download Size: {model_info.get('size_gb', 'Unknown')}")
+
 
             # Check if already cached
             is_cached = check_model_cached(repo_id)
@@ -175,12 +176,27 @@ class SDNQModelLoader:
             print("Note: If the progress bar appears stuck, it is likely verifying files or downloading large chunks. Please wait.")
 
             # Use DiffusionPipeline to support custom pipelines like Flux2Pipeline
-            pipeline = diffusers.DiffusionPipeline.from_pretrained(
-                model_path,
-                torch_dtype=torch_dtype,
-                local_files_only=is_local,
-                trust_remote_code=True, # Required for custom pipelines like Flux 2
-            )
+            try:
+                pipeline = diffusers.DiffusionPipeline.from_pretrained(
+                    model_path,
+                    torch_dtype=torch_dtype,
+                    local_files_only=is_local,
+                    trust_remote_code=True, # Required for custom pipelines like Flux 2
+                )
+            except AttributeError as e:
+                # Fallback for missing Flux2Pipeline in diffusers module
+                # This happens if model_index.json specifies Flux2Pipeline but it's not in the library
+                if "Flux2Pipeline" in str(e):
+                    print("Warning: Flux2Pipeline not found in diffusers, falling back to FluxPipeline...")
+                    from diffusers import FluxPipeline
+                    pipeline = FluxPipeline.from_pretrained(
+                        model_path,
+                        torch_dtype=torch_dtype,
+                        local_files_only=is_local,
+                    )
+                else:
+                    raise
+
 
             print(f"Pipeline loaded: {type(pipeline).__name__}")
 
