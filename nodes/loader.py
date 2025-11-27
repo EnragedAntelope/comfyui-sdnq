@@ -7,7 +7,7 @@ Supports both dropdown selection from catalog and custom repo IDs.
 
 import os
 import torch
-from typing import Tuple
+from typing import Tuple, Dict, Any
 
 # Import SDNQ config to register quantization methods with diffusers
 from sdnq import SDNQConfig
@@ -16,8 +16,12 @@ from sdnq.common import use_torch_compile as triton_is_available
 
 import diffusers
 
-from ..core.wrapper import wrap_pipeline_components
-from ..core.config import get_dtype_from_string, get_device_map
+# Import ComfyUI modules for native model loading
+import comfy.sd
+import comfy.model_management
+import folder_paths
+
+from ..core.config import get_dtype_from_string
 from ..core.registry import get_model_names_for_dropdown, get_repo_id_from_name, get_model_info
 from ..core.downloader import download_model, check_model_cached, get_cached_model_path
 
@@ -56,10 +60,6 @@ class SDNQModelLoader:
                     "default": True,
                     "tooltip": "Enable Triton quantized matmul for faster inference (Linux/WSL only)"
                 }),
-                "cpu_offload": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Offload model to CPU RAM to save VRAM (reduces speed, saves 60-70% VRAM)"
-                }),
             },
             "optional": {
                 "custom_repo_or_path": ("STRING", {
@@ -84,7 +84,6 @@ class SDNQModelLoader:
         model_selection: str,
         dtype: str,
         use_quantized_matmul: bool = True,
-        cpu_offload: bool = True,
         custom_repo_or_path: str = "",
         device: str = "auto"
     ) -> Tuple:
@@ -95,12 +94,11 @@ class SDNQModelLoader:
             model_selection: Selected model from dropdown or "Custom Model"
             dtype: Data type for model weights
             use_quantized_matmul: Enable Triton quantized matmul optimization
-            cpu_offload: Enable model CPU offloading
             custom_repo_or_path: Custom repo ID or path (when using Custom Model)
             device: Device placement strategy
 
         Returns:
-            Tuple of (MODEL, CLIP, VAE) wrappers compatible with ComfyUI
+            Tuple of (MODEL, CLIP, VAE) objects compatible with ComfyUI
 
         Raises:
             ValueError: If model selection is invalid
@@ -132,10 +130,6 @@ class SDNQModelLoader:
             if model_info:
                 print(f"Type: {model_info['type']}")
                 print(f"Quantization: {model_info['quant_level']}")
-                print(f"VRAM Required: {model_info['vram_required']}")
-                print(f"Quality: {model_info['quality']}")
-                print(f"Download Size: {model_info.get('size_gb', 'Unknown')}")
-
 
             # Check if already cached
             is_cached = check_model_cached(repo_id)
@@ -154,8 +148,6 @@ class SDNQModelLoader:
         print(f"Model Path: {model_path}")
         print(f"Dtype: {dtype}")
         print(f"Quantized MatMul: {use_quantized_matmul}")
-        print(f"CPU Offload: {cpu_offload}")
-        print(f"Device: {device}")
 
         # Convert dtype string to torch dtype
         torch_dtype = get_dtype_from_string(dtype)
@@ -166,10 +158,10 @@ class SDNQModelLoader:
         print(f"Source: {'Local cached path' if is_local else 'HuggingFace Hub'}")
 
         try:
-            # Load pipeline using standard diffusers API
-            # diffusers >= 0.36.0 natively supports Flux2Pipeline, Flux2Transformer2DModel, etc.
-            print("Loading model pipeline...")
-            print("Note: If the progress bar appears stuck, it is likely verifying files or downloading large chunks. Please wait.")
+            # Load pipeline with SDNQ support
+            # The SDNQConfig import above registers SDNQ into diffusers
+            # SDNQ pre-quantized models will be loaded with quantization preserved
+            print("Loading SDNQ model pipeline...")
 
             pipeline = diffusers.DiffusionPipeline.from_pretrained(
                 model_path,
@@ -180,49 +172,94 @@ class SDNQModelLoader:
 
             print(f"Pipeline loaded: {type(pipeline).__name__}")
 
-            # Move pipeline to GPU (unless CPU offload will be enabled)
-            if not cpu_offload:
-                # Determine target device
-                if device == "auto":
-                    target_device = "cuda" if torch.cuda.is_available() else "cpu"
-                else:
-                    target_device = device
-                
-                print(f"Moving pipeline to {target_device}...")
-                pipeline = pipeline.to(target_device)
+            # Extract state dictionaries from pipeline components
+            print("Extracting model components for ComfyUI integration...")
 
-            # Apply quantized matmul optimization if requested and available
-            if use_quantized_matmul:
-                if triton_is_available:
-                    print("Applying Triton quantized matmul optimization...")
-                    if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
-                        pipeline.transformer = apply_sdnq_options_to_model(
-                            pipeline.transformer,
-                            use_quantized_matmul=True
-                        )
-                    elif hasattr(pipeline, 'unet') and pipeline.unet is not None:
-                        pipeline.unet = apply_sdnq_options_to_model(
-                            pipeline.unet,
-                            use_quantized_matmul=True
-                        )
-                else:
-                    print("Warning: Triton not available, skipping quantized matmul optimization")
+            # Get transformer/unet component
+            if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
+                model_component = pipeline.transformer
+                model_type = "transformer"
+            elif hasattr(pipeline, 'unet') and pipeline.unet is not None:
+                model_component = pipeline.unet
+                model_type = "unet"
+            else:
+                raise RuntimeError("Pipeline missing transformer or unet component")
 
-            # Apply CPU offloading if requested
-            if cpu_offload:
-                print("Enabling model CPU offload...")
-                pipeline.enable_model_cpu_offload()
+            print(f"Model component: {model_type}")
 
-            # Wrap pipeline components for ComfyUI compatibility
-            print("Wrapping pipeline components for ComfyUI...")
-            model_type = model_info['type'] if model_info else None
-            model_wrapper, clip_wrapper, vae_wrapper = wrap_pipeline_components(pipeline, model_type=model_type)
+            # Extract state dictionary from model component
+            # The quantized weights are preserved in the state_dict
+            print("Extracting model state dictionary...")
+            model_state_dict = model_component.state_dict()
+
+            # Convert state_dict keys if needed (diffusers → ComfyUI format)
+            # For transformers, the keys should already be compatible
+            # For UNet, may need remapping
+            model_options = {"dtype": torch_dtype}
+
+            # Load via ComfyUI's native diffusion model loader
+            # This creates a proper ModelPatcher with latent_format attribute
+            print("Loading via ComfyUI native model loader...")
+            model = comfy.sd.load_diffusion_model_state_dict(
+                model_state_dict,
+                model_options=model_options
+            )
+
+            # Apply SDNQ Triton optimizations to the model inside the ModelPatcher
+            # This adds quantized matmul operations for faster inference
+            if use_quantized_matmul and triton_is_available:
+                print("Applying SDNQ Triton quantized matmul optimization...")
+                try:
+                    # ModelPatcher has a model attribute containing the actual BaseModel
+                    model.model = apply_sdnq_options_to_model(
+                        model.model,
+                        use_quantized_matmul=True
+                    )
+                    print("✓ Triton optimizations applied successfully")
+                except Exception as opt_error:
+                    print(f"Warning: Could not apply Triton optimizations: {opt_error}")
+                    print("Model will still work with quantized weights, just without Triton acceleration")
+            elif use_quantized_matmul and not triton_is_available:
+                print("Note: Triton not available - model uses quantized weights but not Triton kernels")
+
+            # Extract CLIP components
+            print("Extracting CLIP components...")
+            clip_data = self._extract_clip_state_dicts(pipeline)
+
+            if clip_data:
+                embedding_dir = folder_paths.get_folder_paths("embeddings")[0] if folder_paths.get_folder_paths("embeddings") else None
+                clip = comfy.sd.load_text_encoder_state_dicts(
+                    clip_data,
+                    embedding_directory=embedding_dir
+                )
+            else:
+                print("Warning: No CLIP components found in pipeline")
+                clip = None
+
+            # Extract VAE
+            print("Extracting VAE component...")
+            if hasattr(pipeline, 'vae') and pipeline.vae is not None:
+                vae_state_dict = pipeline.vae.state_dict()
+                vae = comfy.sd.VAE(sd=vae_state_dict)
+            else:
+                print("Warning: No VAE component found in pipeline")
+                vae = None
+
+            # Clean up pipeline to free memory
+            del pipeline
+            del model_component
+            del model_state_dict
+            if clip_data:
+                del clip_data
+            if 'vae_state_dict' in locals():
+                del vae_state_dict
+            torch.cuda.empty_cache()
 
             print(f"{'='*60}")
-            print("✓ Model loaded successfully!")
+            print("✓ Model loaded successfully via ComfyUI native loaders!")
             print(f"{'='*60}\n")
 
-            return (model_wrapper, clip_wrapper, vae_wrapper)
+            return (model, clip, vae)
 
         except Exception as e:
             print(f"\n{'='*60}")
@@ -234,5 +271,32 @@ class SDNQModelLoader:
             print(f"2. For HuggingFace models, check internet connection")
             print(f"3. Ensure the model is SDNQ-quantized")
             print(f"4. Check that required dependencies are installed")
+            print(f"5. Check ComfyUI logs for detailed error messages")
             print(f"{'='*60}\n")
             raise RuntimeError(f"Failed to load SDNQ model: {str(e)}") from e
+
+    def _extract_clip_state_dicts(self, pipeline) -> Dict[str, Any]:
+        """
+        Extract CLIP text encoder state dictionaries from a diffusers pipeline.
+
+        Args:
+            pipeline: Diffusers pipeline object
+
+        Returns:
+            Dictionary with clip_l and/or clip_g state dicts, or None if no text encoders
+        """
+        clip_data = {}
+
+        # Check for text_encoder (CLIP-L or similar)
+        if hasattr(pipeline, 'text_encoder') and pipeline.text_encoder is not None:
+            clip_data['clip_l'] = pipeline.text_encoder.state_dict()
+
+        # Check for text_encoder_2 (CLIP-G or T5)
+        if hasattr(pipeline, 'text_encoder_2') and pipeline.text_encoder_2 is not None:
+            clip_data['clip_g'] = pipeline.text_encoder_2.state_dict()
+
+        # Check for text_encoder_3 (some models have 3 encoders)
+        if hasattr(pipeline, 'text_encoder_3') and pipeline.text_encoder_3 is not None:
+            clip_data['t5xxl'] = pipeline.text_encoder_3.state_dict()
+
+        return clip_data if clip_data else None

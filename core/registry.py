@@ -19,10 +19,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.1-dev-qint8",
         "type": "FLUX",
         "quant_level": "int8",
-        "vram_required": "~12 GB",
-        "vram_gb": 12,
-        "quality": "~99%",
-        "size_gb": "~15 GB",
         "description": "FLUX.1-dev 8-bit - Best quality/VRAM balance",
         "priority": 1
     },
@@ -30,10 +26,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.1-dev-qint4",
         "type": "FLUX",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
-        "size_gb": "~9 GB",
         "description": "FLUX.1-dev 4-bit - Extreme VRAM savings",
         "priority": 2
     },
@@ -41,10 +33,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32",
         "type": "FLUX",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
-        "size_gb": "~9 GB",
         "description": "FLUX.1-dev 4-bit SVD - Text-to-Image",
         "priority": 3
     },
@@ -52,10 +40,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.1-schnell-SDNQ-uint4-svd-r32",
         "type": "FLUX",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
-        "size_gb": "~9 GB",
         "description": "FLUX.1-schnell 4-bit SVD - Fast generation",
         "priority": 4
     },
@@ -63,10 +47,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.1-Krea-dev-SDNQ-uint4-svd-r32",
         "type": "FLUX",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
-        "size_gb": "~9 GB",
         "description": "FLUX.1-Krea-dev 4-bit SVD",
         "priority": 5
     },
@@ -74,10 +54,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.1-Kontext-dev-SDNQ-uint4-svd-r32",
         "type": "FLUX",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
-        "size_gb": "~9 GB",
         "description": "FLUX.1-Kontext-dev 4-bit SVD",
         "priority": 6
     },
@@ -87,10 +63,7 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/FLUX.2-dev-SDNQ-uint4-svd-r32",
         "type": "FLUX2",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
-        "description": "FLUX.2-dev 4-bit SVD - Next-gen (Large Download!)",
+        "description": "FLUX.2-dev 4-bit SVD - Next-gen (needs diffusers>=0.35)",
         "priority": 7
     },
 
@@ -99,9 +72,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Qwen-Image-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Qwen-Image 4-bit SVD - Text-to-Image",
         "priority": 8
     },
@@ -109,9 +79,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Qwen-Image-Lightning-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Qwen-Image-Lightning 4-bit SVD - Fast T2I",
         "priority": 9
     },
@@ -119,9 +86,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Qwen-Image-Edit-2509-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Qwen-Image-Edit-2509 4-bit SVD - Image-to-Image",
         "priority": 10
     },
@@ -129,9 +93,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Qwen-Image-Edit-Lightning-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Qwen-Image-Edit-Lightning 4-bit SVD - Fast I2I",
         "priority": 11
     },
@@ -139,9 +100,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Qwen-Image-Edit-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Qwen-Image-Edit 4-bit SVD - Image-to-Image",
         "priority": 12
     },
@@ -149,9 +107,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Qwen3-VL-32B-Instruct-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
-        "vram_required": "~8 GB",
-        "vram_gb": 8,
-        "quality": "~95%",
         "description": "Qwen3-VL-32B 4-bit SVD - Image-to-Text (18B params)",
         "priority": 13
     },
@@ -161,9 +116,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32",
         "type": "Z-Image",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Z-Image-Turbo 4-bit SVD - Fast T2I",
         "priority": 14
     },
@@ -173,9 +125,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Chroma1-HD-SDNQ-uint4-svd-r32",
         "type": "Chroma",
         "quant_level": "uint4",
-        "vram_required": "~6 GB",
-        "vram_gb": 6,
-        "quality": "~95%",
         "description": "Chroma1-HD 4-bit SVD - Text-to-Image",
         "priority": 15
     },
@@ -183,9 +132,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/ChronoEdit-14B-SDNQ-uint4-svd-r32",
         "type": "Chrono",
         "quant_level": "uint4",
-        "vram_required": "~7 GB",
-        "vram_gb": 7,
-        "quality": "~95%",
         "description": "ChronoEdit-14B 4-bit SVD - Image editing",
         "priority": 16
     },
@@ -193,9 +139,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/HunyuanImage3-SDNQ-uint4-svd-r32",
         "type": "Hunyuan",
         "quant_level": "uint4",
-        "vram_required": "~12 GB",
-        "vram_gb": 12,
-        "quality": "~95%",
         "description": "HunyuanImage3 4-bit SVD - Text-to-Image (45B params)",
         "priority": 17
     },
@@ -205,9 +148,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/NoobAI-XL-Vpred-v1.0-SDNQ-uint4-svd-r128",
         "type": "SDXL",
         "quant_level": "uint4",
-        "vram_required": "~4 GB",
-        "vram_gb": 4,
-        "quality": "~95%",
         "description": "NoobAI-XL v1.0 4-bit SVD - Anime/illustration",
         "priority": 18
     },
@@ -215,9 +155,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/NoobAI-XL-v1.1-SDNQ-uint4-svd-r128",
         "type": "SDXL",
         "quant_level": "uint4",
-        "vram_required": "~4 GB",
-        "vram_gb": 4,
-        "quality": "~95%",
         "description": "NoobAI-XL v1.1 4-bit SVD - Anime/illustration",
         "priority": 19
     },
@@ -227,9 +164,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Wan2.2-I2V-A14B-SDNQ-uint4-svd-r32",
         "type": "Wan",
         "quant_level": "uint4",
-        "vram_required": "~8 GB",
-        "vram_gb": 8,
-        "quality": "~95%",
         "description": "Wan2.2-I2V-A14B 4-bit SVD - Image-to-Video",
         "priority": 20
     },
@@ -237,9 +171,6 @@ SDNQ_MODEL_CATALOG = {
         "repo_id": "Disty0/Wan2.2-T2V-A14B-SDNQ-uint4-svd-r32",
         "type": "Wan",
         "quant_level": "uint4",
-        "vram_required": "~8 GB",
-        "vram_gb": 8,
-        "quality": "~95%",
         "description": "Wan2.2-T2V-A14B 4-bit SVD - Text-to-Video",
         "priority": 21
     },
@@ -277,18 +208,12 @@ def get_model_names(sort_by_priority: bool = True) -> List[str]:
 
 def get_model_names_for_dropdown() -> List[str]:
     """
-    Get model names formatted for ComfyUI dropdown with descriptions.
+    Get model names formatted for ComfyUI dropdown.
 
     Returns:
-        List of formatted model names with metadata
+        List of model names sorted by priority
     """
-    names = []
-    for model_name in get_model_names(sort_by_priority=True):
-        info = SDNQ_MODEL_CATALOG[model_name]
-        # Format: "Model Name [VRAM] - Description"
-        formatted = f"{model_name} [{info['vram_required']}]"
-        names.append(formatted)
-    return names
+    return get_model_names(sort_by_priority=True)
 
 
 def get_model_info(model_name: str) -> Optional[Dict]:
@@ -361,24 +286,18 @@ def recommend_models_by_vram(vram_gb: int) -> List[str]:
     """
     Recommend models based on available VRAM.
 
+    NOTE: VRAM estimates removed due to inaccuracy. This function now returns
+    all models sorted by priority. Users should check model requirements on HuggingFace.
+
     Args:
-        vram_gb: Available VRAM in GB
+        vram_gb: Available VRAM in GB (currently unused)
 
     Returns:
-        List of recommended model names
+        List of all model names sorted by priority
     """
-    recommendations = []
-
-    for model_name, info in SDNQ_MODEL_CATALOG.items():
-        required_vram = info.get("vram_gb", 12)
-        # Add 10% headroom for safety
-        if required_vram * 1.1 <= vram_gb:
-            recommendations.append(model_name)
-
-    # Sort by priority
-    recommendations.sort(key=lambda x: SDNQ_MODEL_CATALOG[x].get("priority", 999))
-
-    return recommendations
+    # Return all models sorted by priority
+    # Users can check actual VRAM requirements on the HuggingFace model pages
+    return get_model_names(sort_by_priority=True)
 
 
 def get_model_statistics() -> Dict[str, int]:

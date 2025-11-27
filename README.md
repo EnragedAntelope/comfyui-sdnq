@@ -2,11 +2,9 @@
 
 **Load SDNQ quantized models in ComfyUI with 50-75% VRAM savings!**
 
-This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models in ComfyUI workflows. Run large models like FLUX.1 and SD3.5 on consumer hardware with significantly reduced VRAM requirements while maintaining image quality.
+This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models in ComfyUI workflows. Run large models like FLUX.2, FLUX.1, Qwen-Image, Z-Image, HunyuanImage3, and more on consumer hardware with significantly reduced VRAM requirements while maintaining image quality.
 
 > **SDNQ is developed by [Disty0](https://github.com/Disty0)** - this node pack provides ComfyUI integration.
-> **SDNQ is developed by [Disty0](https://github.com/Disty0)** - this node pack provides ComfyUI integration.
-
 
 ---
 
@@ -16,9 +14,10 @@ This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://gith
 - **⚡ Auto-Download**: Models download automatically from HuggingFace on first use
 - **💾 Smart Caching**: Download once, use forever
 - **🚀 VRAM Savings**: 50-75% memory reduction with quantization
-- **🎨 Quality Maintained**: Minimal quality loss (int8: ~99%, int4: ~95%)
-- **🔌 Compatible**: Works with standard ComfyUI nodes
-- **🏃 Optional Optimizations**: Triton acceleration, CPU offloading
+- **🎨 Quality Maintained**: Minimal quality loss with high-quality quantization
+- **🔌 Compatible**: Works with standard ComfyUI nodes (KSampler, VAE Decode, etc.)
+- **🏃 Optional Optimizations**: Triton acceleration for faster inference
+- **🛠️ Model Quantization**: Convert your own models to SDNQ format
 
 ---
 
@@ -56,7 +55,7 @@ Restart ComfyUI after installation.
 ### 1. Basic Usage
 
 1. Add the **SDNQ Model Loader** node (under `loaders/SDNQ`)
-2. **Select a model** from the dropdown (shows VRAM requirements)
+2. **Select a model** from the dropdown
 3. **First use**: Model auto-downloads from HuggingFace (cached for future use)
 4. Connect outputs:
    - `MODEL` → KSampler
@@ -65,20 +64,22 @@ Restart ComfyUI after installation.
 
 **Defaults are optimized** - just select a model and go!
 
-**Need more VRAM savings?** Enable `cpu_offload` (reduces speed, saves 60-70% VRAM)
-
 ### 2. Custom Models
 
 Select `--Custom Model--` from dropdown, then enter:
 - **HuggingFace repo ID**: `Disty0/your-model-qint8`
 - **Local path**: `/path/to/model`
 
-### 3. Available Models
+### 3. Available Models (21+ Pre-Configured)
 
-Includes FLUX, FLUX.2, Z-Image, SD3.5, and SDXL models with int8/int6/int4 quantization levels.
+The dropdown includes:
+- **FLUX Models**: FLUX.1-dev, FLUX.1-schnell, FLUX.2, FLUX.1-Krea, FLUX.1-Kontext
+- **Qwen Models**: Qwen-Image, Qwen-Image-Lightning, Qwen-Image-Edit variants, Qwen3-VL-32B
+- **Other Models**: Z-Image-Turbo, Chroma1-HD, ChronoEdit-14B, HunyuanImage3
+- **Anime/Illustration**: NoobAI-XL variants
+- **Video**: Wan2.2-I2V, Wan2.2-T2V
 
-
-Browse full collection: https://huggingface.co/collections/Disty0/sdnq
+Most models available in uint4 quantization. Browse full collection: https://huggingface.co/collections/Disty0/sdnq
 
 ---
 
@@ -93,36 +94,36 @@ Browse full collection: https://huggingface.co/collections/Disty0/sdnq
 | model_selection | DROPDOWN | First model | Select pre-configured model (auto-downloads) |
 | custom_repo_or_path | STRING | "" | For custom models: repo ID or local path |
 | dtype | CHOICE | bfloat16 | Weight data type |
-| use_quantized_matmul | BOOLEAN | True | Triton optimization (Linux/WSL) |
-| cpu_offload | BOOLEAN | False | Offload to CPU RAM (slower, saves VRAM) |
+| use_quantized_matmul | BOOLEAN | True | Triton optimization (Linux/WSL only) |
 | device | CHOICE | auto | Device placement |
 
 **Outputs**: `MODEL`, `CLIP`, `VAE` (compatible with standard ComfyUI nodes)
 
 ---
 
-## Performance Comparison
+## Performance Notes
 
-Typical VRAM usage for FLUX.1-dev on RTX 4090:
+SDNQ quantization provides significant VRAM savings while maintaining quality:
+- **int8**: Best quality/VRAM balance
+- **uint4**: Maximum VRAM savings
 
-| Version | VRAM Usage | Quality |
-|---------|------------|---------|
-| Full fp16 | ~24 GB | 100% (reference) |
-| SDNQ int8 | ~12 GB | ~99% |
-| SDNQ int6 | ~9 GB | ~97% |
-| SDNQ uint4 | ~6 GB | ~95% |
+Actual VRAM usage varies by:
+- Model architecture (FLUX, Qwen, etc.)
+- Image resolution
+- Batch size
+- System configuration
 
-*Measurements may vary based on resolution, batch size, and system configuration.*
+Check model pages on HuggingFace for specific requirements: https://huggingface.co/collections/Disty0/sdnq
 
 ---
 
 ## Model Storage
 
-Models are cached following Diffusers/HuggingFace Hub conventions:
-- **HuggingFace downloads**: `~/.cache/huggingface/hub/`
-- **Recommended local path**: `ComfyUI/models/diffusers/sdnq/`
+Downloaded models are stored in:
+- **Location**: `ComfyUI/models/diffusers/sdnq/`
+- **Format**: Standard diffusers format (works with other tools)
 
-You can move models from the cache to your ComfyUI models folder and reference them by path to avoid re-downloading.
+Models are cached automatically - download once, use forever!
 
 ---
 
@@ -141,10 +142,10 @@ Triton is not available on native Windows. Use WSL2 for Triton support.
 
 ### Out of Memory Errors
 
-1. Enable **cpu_offload** in the node settings
-2. Use a more aggressive quantization (int6 or uint4)
-3. Reduce batch size or resolution
-4. Close other GPU applications
+1. Use a more aggressive quantization (uint4 instead of int8)
+2. Reduce batch size or resolution
+3. Close other GPU applications
+4. Use ComfyUI's built-in VRAM management settings
 
 ### Model Loading Fails
 
@@ -157,33 +158,80 @@ Triton is not available on native Windows. Use WSL2 for Triton support.
 
 The model may not be in the expected diffusers format. SDNQ models should have a standard diffusers directory structure with `model_index.json`.
 
-### ComfyUI Weight Streaming Compatibility
+### Integration with ComfyUI
 
-**Important**: Our `cpu_offload` option uses diffusers/Accelerate offloading, which operates independently from ComfyUI's weight streaming system.
+SDNQ models are loaded via ComfyUI's native model loading system and work seamlessly with:
+- KSampler and all sampling nodes
+- VAE Encode/Decode
+- CLIP Text Encode
+- ComfyUI's built-in VRAM management
+- Other compatible custom nodes
 
-**What this means**:
-- ✅ `cpu_offload=True` works great for VRAM savings (uses diffusers' system)
-- ❓ ComfyUI's native weight streaming likely won't work with our wrappers (different architecture)
-- 🔧 `cpu_offload=False` keeps the model fully in VRAM (fastest, but uses more VRAM)
-
-**Recommendation**: Use the built-in `cpu_offload` option for VRAM management. It's well-tested with diffusers models and provides 60-70% VRAM reduction.
-
-See [WEIGHT_STREAMING.md](WEIGHT_STREAMING.md) for technical details.
+The quantized weights are preserved and the models integrate fully with ComfyUI's workflows.
 
 ---
 
 ## Quantizing Your Own Models
 
-**Phase 3 Complete**: Support for quantizing existing checkpoints to SDNQ format directly in ComfyUI is now available!
+### SDNQ Model Quantizer Node
 
+Convert any loaded ComfyUI model to SDNQ format:
 
-For now, use the [sdnq](https://github.com/Disty0/sdnq) package directly or use pre-quantized models from the [Disty0 collection](https://huggingface.co/collections/Disty0/sdnq).
+1. Load a model with any ComfyUI loader (CheckpointLoaderSimple, etc.)
+2. Add **SDNQ Model Quantizer** node (under `loaders/SDNQ`)
+3. Connect the MODEL output to the quantizer
+4. Configure:
+   - **quant_type**: int8, int6, uint4, or float8_e4m3fn
+   - **output_name**: Name for your quantized model
+   - **use_svd**: Enable for better quality (optional)
+5. Execute to quantize and save
+
+Quantized models are saved to `ComfyUI/models/diffusers/sdnq/` and can be loaded with the SDNQ Model Loader.
 
 ---
 
 ## Development Status
 
-**Made possible by [Disty0's SDNQ](https://github.com/Disty0/sdnq)** - bringing large models to consumer hardware!
+### Phase 1: ✅ Complete
+- [x] Basic SDNQ model loading
+- [x] Local and HuggingFace Hub support
+- [x] ComfyUI native integration (proper MODEL, CLIP, VAE objects)
+- [x] Triton optimization support
+
+### Phase 2: ✅ Complete
+- [x] Model catalog with dropdown selection (21+ models)
+- [x] Automatic model downloading with progress tracking
+- [x] Smart caching in ComfyUI models folder
+- [x] Custom model support
+
+### Phase 3: ✅ Complete
+- [x] Model quantization node (convert your own models)
+- [x] All latest models (FLUX.2, Qwen, Z-Image, HunyuanImage3, Video models)
+- [x] ComfyUI native model loading integration
+
+### Future Enhancements:
+- [ ] LoRA support with SDNQ models
+- [ ] Memory usage reporting node
+- [ ] Additional optimization options
+
+---
+
+## Contributing
+
+Contributions welcome! Please:
+1. Follow the existing code style
+2. Test with multiple model types (FLUX, SD3, SDXL)
+3. Update documentation for new features
+
+---
+
+## License
+
+Apache License 2.0 - See [LICENSE](LICENSE)
+
+This project integrates with [SDNQ by Disty0](https://github.com/Disty0/sdnq). Please respect the upstream project's license.
+
+---
 
 ## Credits
 

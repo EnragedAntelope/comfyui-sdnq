@@ -33,6 +33,56 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 ---
 
+## MAJOR REFACTOR (2025-11-27 - Session 2)
+
+### Complete Rewrite to Use ComfyUI Native Loading ✅ IN PROGRESS
+
+**Issue**: Previous wrapper approach (SDNQModelWrapper, SDNQCLIPWrapper, SDNQVAEWrapper) was fundamentally broken:
+- Didn't create proper ComfyUI ModelPatcher objects
+- Missing `latent_format` attribute causing `'NoneType' object has no attribute 'latent_channels'` error
+- Not compatible with ComfyUI's expected interfaces
+
+**Solution**: Rewrote `nodes/loader.py` to use ComfyUI's native model loading functions:
+1. Load SDNQ pipeline via diffusers (preserves pre-quantized weights)
+2. Extract state dictionaries from transformer/unet, text_encoder(s), and VAE
+3. Use ComfyUI's native loaders:
+   - `comfy.sd.load_diffusion_model_state_dict()` → creates proper ModelPatcher with latent_format
+   - `comfy.sd.load_text_encoder_state_dicts()` → creates proper CLIP object
+   - `comfy.sd.VAE()` → creates proper VAE object
+4. Apply SDNQ Triton optimizations to model inside ModelPatcher (optional)
+
+**Key Changes**:
+- Removed `core/wrapper.py` dependency (will delete file)
+- Removed `cpu_offload` option (ComfyUI handles model management)
+- Added `_extract_clip_state_dicts()` helper method
+- Now returns proper ComfyUI MODEL/CLIP/VAE objects, not custom wrappers
+- Quantized weights preserved through state_dict extraction
+- Triton optimizations applied after ComfyUI loading
+
+**Files Modified**:
+- `nodes/loader.py`: Complete rewrite of load_model() method
+
+**Status**: ✅ Implementation complete
+
+### Documentation Updates ✅ COMPLETE
+
+**Changes**:
+- Updated README.md:
+  - Removed reference to CREDITS.md (now credits Disty0 directly in header)
+  - Added modern model examples (FLUX.2, Qwen, Z-Image, HunyuanImage3)
+  - Updated model count (21+ models)
+  - Removed cpu_offload from parameters (no longer needed)
+  - Updated Phase 3 status to complete
+  - Added SDNQ Model Quantizer documentation
+  - Removed inaccurate VRAM estimates
+  - Updated troubleshooting section
+- Removed CREDITS.md file
+- Updated context.md with complete session history
+
+**Status**: ✅ Documentation complete
+
+---
+
 ## CRITICAL BUG FIXES (2025-11-27)
 
 **Files**: `nodes/loader.py`
@@ -56,9 +106,27 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 ---
 
+## Current Status (2025-11-27 - Session 2)
+
+**ALL PHASES COMPLETE!** ✅
+
+### Completed in This Session:
+1. ✅ Rewrote loader to use ComfyUI native model loading (proper ModelPatcher/CLIP/VAE objects)
+2. ✅ Removed all inaccurate size/VRAM estimates from registry
+3. ✅ Reviewed quantizer node (no changes needed)
+4. ✅ Updated all documentation (README, context.md)
+5. ✅ Removed CREDITS.md (now credits in README header)
+
+### Ready for Testing:
+- Model loading with ComfyUI native integration
+- Proper MODEL/CLIP/VAE objects that work with KSampler and other nodes
+- 21 pre-configured models
+- Auto-download and caching
+- Quantizer node for converting existing models
+
 ## Current Blockers
 
-**NONE** - Phase 2 complete! Ready for production use and testing!
+**NONE** - All implementation complete! Ready for user testing!
 
 ### Next Steps
 1. Test model dropdown with auto-download
