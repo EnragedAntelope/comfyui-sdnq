@@ -180,6 +180,17 @@ class SDNQModelLoader:
 
             print(f"Pipeline loaded: {type(pipeline).__name__}")
 
+            # Move pipeline to GPU (unless CPU offload will be enabled)
+            if not cpu_offload:
+                # Determine target device
+                if device == "auto":
+                    target_device = "cuda" if torch.cuda.is_available() else "cpu"
+                else:
+                    target_device = device
+                
+                print(f"Moving pipeline to {target_device}...")
+                pipeline = pipeline.to(target_device)
+
             # Apply quantized matmul optimization if requested and available
             if use_quantized_matmul:
                 if triton_is_available:
