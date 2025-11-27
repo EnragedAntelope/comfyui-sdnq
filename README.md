@@ -183,56 +183,6 @@ For now, use the [sdnq](https://github.com/Disty0/sdnq) package directly or use 
 
 ## Development Status
 
-### Phase 1: ✅ Complete
-- [x] Basic SDNQ model loading
-- [x] Local and HuggingFace Hub support
-- [x] ComfyUI type compatibility (MODEL, CLIP, VAE)
-- [x] Triton optimization support
-- [x] CPU offloading
-
-### Phase 2: ✅ Complete
-- [x] Model catalog with dropdown selection
-- [x] Automatic model downloading with progress tracking
-- [x] Smart caching
-- [x] Model metadata display
-- [x] Custom model support
-
-### Phase 3: ✅ Complete
-- [x] Checkpoint quantization node (convert your own models)
-- [x] LoRA support with SDNQ models
-- [x] Memory usage reporting
-- [x] Advanced optimization options
-- [x] Video model support (Wan2.2, etc.)
-
----
-
-## Contributing
-
-Contributions welcome! Please:
-1. Follow the existing code style
-2. Test with multiple model types (FLUX, SD3, SDXL)
-3. Update documentation for new features
-
----
-
-## License
-
-Apache License 2.0 - See [LICENSE](LICENSE)
-
-This project integrates with [SDNQ by Disty0](https://github.com/Disty0/sdnq). Please respect the upstream project's license.
-
----
-
-## Links
-
-- **This Repository**: https://github.com/EnragedAntelope/comfyui-sdnq
-- **SDNQ Engine**: https://github.com/Disty0/sdnq
-- **Pre-quantized Models**: https://huggingface.co/collections/Disty0/sdnq
-- **SDNQ Documentation**: https://github.com/vladmandic/sdnext/wiki/SDNQ-Quantization
-- **ComfyUI**: https://github.com/comfyanonymous/ComfyUI
-
----
-
 **Made possible by [Disty0's SDNQ](https://github.com/Disty0/sdnq)** - bringing large models to consumer hardware!
 
 ## Credits

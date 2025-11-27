@@ -12,6 +12,9 @@ transformers>=4.57.0
 # HuggingFace Hub integration (latest stable)
 huggingface-hub>=1.1.0
 
+# HuggingFace XET for faster downloads (optional but highly recommended)
+hf-xet>=1.3.0
+
 # Model serialization (latest stable)
 safetensors>=0.7.0
 
