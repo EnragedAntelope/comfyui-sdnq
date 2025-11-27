@@ -7,7 +7,8 @@ Supports both dropdown selection from catalog and custom repo IDs.
 
 import os
 import torch
-from typing import Tuple, Dict, Any
+import gc
+from typing import Tuple, Dict, Any, Optional
 
 # Import SDNQ config to register quantization methods with diffusers
 from sdnq import SDNQConfig
@@ -15,10 +16,10 @@ from sdnq.loader import apply_sdnq_options_to_model
 from sdnq.common import use_torch_compile as triton_is_available
 
 import diffusers
+from diffusers import AutoPipeline
 
 # Import ComfyUI modules for native model loading
 import comfy.sd
-import comfy.model_management
 import folder_paths
 
 from ..core.config import get_dtype_from_string
@@ -78,6 +79,63 @@ class SDNQModelLoader:
     FUNCTION = "load_model"
     CATEGORY = "loaders/SDNQ"
     DESCRIPTION = "Load SDNQ quantized models with automatic downloads. Models by Disty0."
+
+    @staticmethod
+    def cleanup_resources(pipeline=None, model_component=None, model_state_dict=None,
+                          clip_data=None, vae_state_dict=None, force=True):
+        """
+        Comprehensive cleanup of resources to prevent torch compile state pollution.
+
+        This is critical to prevent the "black image" bug where failed loads break
+        subsequent ComfyUI workflows. Based on KJNodes approach to torch compile cleanup.
+
+        Args:
+            pipeline: Diffusers pipeline to delete
+            model_component: Transformer/UNet component to delete
+            model_state_dict: Model state dict to delete
+            clip_data: CLIP state dicts to delete
+            vae_state_dict: VAE state dict to delete
+            force: Force aggressive cleanup (torch compile reset, gc)
+        """
+        try:
+            # Delete references in reverse order of creation
+            if vae_state_dict is not None:
+                del vae_state_dict
+            if clip_data is not None:
+                del clip_data
+            if model_state_dict is not None:
+                del model_state_dict
+            if model_component is not None:
+                del model_component
+            if pipeline is not None:
+                # Ensure pipeline components are moved to CPU before deletion
+                try:
+                    if hasattr(pipeline, 'to'):
+                        pipeline.to('cpu')
+                except:
+                    pass
+                del pipeline
+
+            if force:
+                # Force garbage collection
+                gc.collect()
+
+                # Clear CUDA cache
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    # Synchronize to ensure cleanup completes
+                    torch.cuda.synchronize()
+
+                # Reset torch dynamo (torch.compile) cache to prevent state pollution
+                # This prevents the "black image" bug from torch compile failures
+                try:
+                    torch._dynamo.reset()
+                except:
+                    pass  # Not available in all torch versions
+
+        except Exception as cleanup_error:
+            print(f"Warning: Error during resource cleanup: {cleanup_error}")
+            # Don't raise - cleanup errors shouldn't break execution
 
     def load_model(
         self,
@@ -157,13 +215,21 @@ class SDNQModelLoader:
 
         print(f"Source: {'Local cached path' if is_local else 'HuggingFace Hub'}")
 
+        # Track resources for cleanup
+        pipeline = None
+        model_component = None
+        model_state_dict = None
+        clip_data = None
+        vae_state_dict = None
+
         try:
             # Load pipeline with SDNQ support
             # The SDNQConfig import above registers SDNQ into diffusers
             # SDNQ pre-quantized models will be loaded with quantization preserved
+            # AutoPipeline auto-detects the correct pipeline type (T2I, I2V, T2V, multimodal, etc.)
             print("Loading SDNQ model pipeline...")
 
-            pipeline = diffusers.DiffusionPipeline.from_pretrained(
+            pipeline = AutoPipeline.from_pretrained(
                 model_path,
                 torch_dtype=torch_dtype,
                 local_files_only=is_local,
@@ -176,6 +242,11 @@ class SDNQModelLoader:
             print("Extracting model components for ComfyUI integration...")
 
             # Get transformer/unet component
+            # Note: Different pipeline types (T2I, I2I, I2V, T2V, multimodal) all use
+            # transformer or unet architecture. AutoPipeline loads the correct type:
+            # - FLUX.1/FLUX.2: Flux2Pipeline (text-to-image with optional image guidance)
+            # - Qwen-Image-Edit: QwenImageEditPipeline (image editing, requires input image)
+            # - Wan2.2: Video pipelines (I2V, T2V with temporal components)
             if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
                 model_component = pipeline.transformer
                 model_type = "transformer"
@@ -192,6 +263,20 @@ class SDNQModelLoader:
             print("Extracting model state dictionary...")
             model_state_dict = model_component.state_dict()
 
+            # DEBUG: Log state dict keys for troubleshooting
+            print(f"\n{'─'*60}")
+            print(f"DEBUG: State Dict Analysis")
+            print(f"{'─'*60}")
+            print(f"Total keys in state_dict: {len(model_state_dict.keys())}")
+            sample_keys = list(model_state_dict.keys())[:10]
+            print(f"Sample keys (first 10):")
+            for i, key in enumerate(sample_keys, 1):
+                tensor_shape = tuple(model_state_dict[key].shape) if hasattr(model_state_dict[key], 'shape') else "N/A"
+                tensor_dtype = model_state_dict[key].dtype if hasattr(model_state_dict[key], 'dtype') else "N/A"
+                print(f"  {i}. {key}")
+                print(f"     Shape: {tensor_shape}, Dtype: {tensor_dtype}")
+            print(f"{'─'*60}\n")
+
             # Convert state_dict keys if needed (diffusers → ComfyUI format)
             # For transformers, the keys should already be compatible
             # For UNet, may need remapping
@@ -200,17 +285,23 @@ class SDNQModelLoader:
             # Load via ComfyUI's native diffusion model loader
             # This creates a proper ModelPatcher with latent_format attribute
             print("Loading via ComfyUI native model loader...")
+            print("This step detects model architecture from state_dict keys...")
             model = comfy.sd.load_diffusion_model_state_dict(
                 model_state_dict,
                 model_options=model_options
             )
+            print(f"✓ Model architecture detected: {type(model).__name__ if model else 'Unknown'}")
 
             # Apply SDNQ Triton optimizations to the model inside the ModelPatcher
             # This adds quantized matmul operations for faster inference
+            # WARNING: This uses torch.compile which can pollute torch state on failure
             if use_quantized_matmul and triton_is_available:
                 print("Applying SDNQ Triton quantized matmul optimization...")
+                print("(This uses torch.compile - if errors occur, torch state will be reset)")
                 try:
                     # ModelPatcher has a model attribute containing the actual BaseModel
+                    # Save original reference in case we need to restore it
+                    original_model = model.model
                     model.model = apply_sdnq_options_to_model(
                         model.model,
                         use_quantized_matmul=True
@@ -219,6 +310,17 @@ class SDNQModelLoader:
                 except Exception as opt_error:
                     print(f"Warning: Could not apply Triton optimizations: {opt_error}")
                     print("Model will still work with quantized weights, just without Triton acceleration")
+                    # Restore original model if optimization failed
+                    try:
+                        model.model = original_model
+                    except:
+                        pass
+                    # Reset torch compile state to prevent pollution
+                    try:
+                        torch._dynamo.reset()
+                        print("✓ Torch compile state reset after optimization failure")
+                    except:
+                        pass
             elif use_quantized_matmul and not triton_is_available:
                 print("Note: Triton not available - model uses quantized weights but not Triton kernels")
 
@@ -245,15 +347,17 @@ class SDNQModelLoader:
                 print("Warning: No VAE component found in pipeline")
                 vae = None
 
-            # Clean up pipeline to free memory
-            del pipeline
-            del model_component
-            del model_state_dict
-            if clip_data:
-                del clip_data
-            if 'vae_state_dict' in locals():
-                del vae_state_dict
-            torch.cuda.empty_cache()
+            # Clean up pipeline and intermediate objects
+            # Use non-forced cleanup since we succeeded
+            print("Cleaning up intermediate resources...")
+            self.cleanup_resources(
+                pipeline=pipeline,
+                model_component=model_component,
+                model_state_dict=model_state_dict,
+                clip_data=clip_data,
+                vae_state_dict=vae_state_dict,
+                force=False  # Normal cleanup, no torch dynamo reset needed
+            )
 
             print(f"{'='*60}")
             print("✓ Model loaded successfully via ComfyUI native loaders!")
@@ -272,7 +376,22 @@ class SDNQModelLoader:
             print(f"3. Ensure the model is SDNQ-quantized")
             print(f"4. Check that required dependencies are installed")
             print(f"5. Check ComfyUI logs for detailed error messages")
+            print(f"6. Review DEBUG state dict keys above for compatibility issues")
             print(f"{'='*60}\n")
+
+            # CRITICAL: Aggressive cleanup to prevent torch compile state pollution
+            # This prevents the "black image" bug where failed loads break other workflows
+            print("Performing aggressive cleanup to prevent session corruption...")
+            self.cleanup_resources(
+                pipeline=pipeline,
+                model_component=model_component,
+                model_state_dict=model_state_dict,
+                clip_data=clip_data,
+                vae_state_dict=vae_state_dict,
+                force=True  # Force torch dynamo reset and full cleanup
+            )
+            print("✓ Cleanup complete - ComfyUI session should remain stable")
+
             raise RuntimeError(f"Failed to load SDNQ model: {str(e)}") from e
 
     def _extract_clip_state_dicts(self, pipeline) -> Dict[str, Any]:

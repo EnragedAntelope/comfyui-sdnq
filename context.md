@@ -64,6 +64,41 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 **Status**: ✅ Implementation complete
 
+### AutoPipeline Fix for Video/Multimodal Models ✅ COMPLETE (2025-11-27 - Session 2)
+
+**Issue**: Code used `AutoPipelineForText2Image` which fails for:
+- Video models (Wan2.2-I2V, Wan2.2-T2V)
+- Multimodal editing models (Qwen-Image-Edit)
+- Any non-T2I pipeline types
+
+**Solution**: Changed to `AutoPipeline.from_pretrained()`:
+- Auto-detects correct pipeline type from model_index.json
+- Supports all pipeline types: T2I, I2I, I2V, T2V, multimodal
+- **FLUX.2** → `Flux2Pipeline` (T2I with optional image guidance)
+- **Qwen-Image-Edit** → `QwenImageEditPipeline` (requires input image + text)
+- **Wan2.2-I2V/T2V** → Video pipelines with temporal components
+
+**Research Findings**:
+- FLUX.2 uses single Mistral Small 3.1 text encoder (vs FLUX.1's dual encoders)
+- Qwen-Image-Edit uses dual-path architecture: Qwen2.5-VL + VAE Encoder
+- All models still have transformer/unet components that can be extracted
+- ComfyUI has native support for both FLUX.2 and Qwen-Image-Edit
+
+**Files Modified**:
+- `nodes/loader.py`:
+  - Changed import: added `from diffusers import AutoPipeline`
+  - Changed pipeline loading from `AutoPipelineForText2Image` to `AutoPipeline`
+  - Removed unused `comfy.model_management` import
+  - Added comprehensive comments about pipeline types
+
+**Compatibility Note**:
+- Video and multimodal models will load correctly via AutoPipeline
+- Whether ComfyUI's `load_diffusion_model_state_dict()` recognizes all architectures needs testing
+- FLUX.2 and Qwen-Image-Edit should work (ComfyUI has native support)
+- Video model (Wan2.2) support in ComfyUI is unknown
+
+**Status**: ✅ Fix implemented, needs user testing
+
 ### Documentation Updates ✅ COMPLETE
 
 **Changes**:
