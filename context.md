@@ -33,6 +33,112 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 ---
 
+## 🚨 CRITICAL: diffusers 0.36.0+ Breaking Changes (2025-11-27 - Session 3)
+
+### AutoPipeline Removed in diffusers 0.36.0.dev0 ✅ FIXED
+
+**Issue**: ImportError when loading models with diffusers installed from GitHub (0.36.0.dev0)
+```python
+ImportError: cannot import name 'AutoPipeline' from 'diffusers'
+```
+
+**Root Cause**:
+- `AutoPipeline` class was **completely removed** in diffusers 0.36.0
+- Only task-specific classes remain: `AutoPipelineForText2Image`, `AutoPipelineForImage2Image`, `AutoPipelineForInpainting`
+- **NO video or multimodal AutoPipeline classes** exist
+
+**Solution**: Changed to `DiffusionPipeline` (base class)
+- `DiffusionPipeline.from_pretrained()` auto-detects pipeline type from `model_index.json`
+- Works with **ALL** model types: T2I, I2I, I2V, T2V, multimodal
+- Supports FLUX, Qwen, video models (Wan2.2), everything
+
+**Files Modified**:
+- `nodes/loader.py`:
+  - Line 19: `from diffusers import DiffusionPipeline` (was `AutoPipeline`)
+  - Line 262: `pipeline = DiffusionPipeline.from_pretrained(...)` (was `AutoPipeline`)
+- `README.md`: Added critical section about diffusers 0.36.0+ requirement with GitHub install instructions
+- `requirements.txt`: Specifies `diffusers>=0.36.0` (though 0.36.0 not yet on PyPI, must install from GitHub)
+
+**Status**: ✅ Fixed and documented
+
+**Important**: Users must install diffusers from GitHub until 0.36.0 is released on PyPI:
+```bash
+pip install git+https://github.com/huggingface/diffusers.git
+```
+
+---
+
+## 🐛 Active Bugs Being Fixed (2025-11-27 - Session 3)
+
+### 1. FLUX.2 Loading Failure: Missing x_embedder.bias ⚠️ IN PROGRESS
+
+**Issue**: ComfyUI's native loader expects `x_embedder.bias` key but SDNQ models don't have it
+```python
+KeyError: 'x_embedder.bias'
+File "D:\comfy\comfy\model_detection.py", line 1010, in convert_diffusers_mmdit
+    hidden_size = state_dict["x_embedder.bias"].shape[0]
+```
+
+**Root Cause**:
+- SDNQ quantized models may have missing bias terms (removed during quantization or architecture doesn't include them)
+- ComfyUI's `load_diffusion_model_state_dict()` expects standard checkpoint format
+- Model detection code in ComfyUI looks for specific keys to determine architecture
+
+**Solution Implemented**:
+- Added code to inject missing bias terms as zeros before passing to ComfyUI loader
+- Checks for: `x_embedder.bias`, `context_embedder.bias`, `t_embedder.bias`, `y_embedder.bias`
+- Creates zero-initialized bias tensors with correct shapes derived from weight tensors
+
+**Files Modified**:
+- `nodes/loader.py`: Added bias injection code at lines 287-304
+
+**Status**: ⚠️ Fix implemented, needs testing
+
+**Alternative Approach** (if bias fix doesn't work):
+- Use diffusers pipeline components directly (core/wrapper.py approach)
+- Don't extract state dicts, wrap pipeline instead
+- This is more aligned with original architecture plan
+
+### 2. FLUX.1 Hanging After FLUX.2 Failure ⚠️ IN PROGRESS
+
+**Issue**: After FLUX.2 load fails, FLUX.1 hangs at 29% during pipeline loading
+```
+Loading pipeline components...:  29%|...| 2/7 [00:00<00:02,  2.36it/s]
+```
+Hangs forever, no CPU/RAM/VRAM usage
+
+**Root Cause**:
+- Previous failed load leaves resources in bad state
+- Possible causes:
+  - File locks from previous load
+  - CUDA context not cleared
+  - diffusers internal state pollution
+  - Torch compile cache corruption
+
+**Solution Implemented**:
+- Added pre-load cleanup before each model load (lines 233-244)
+- Improved cleanup_resources() with:
+  - Multiple gc.collect() passes
+  - CUDA synchronize before empty_cache
+  - Reset peak memory stats
+  - More aggressive torch dynamo reset
+- Added flush=True to print statements to ensure proper output
+
+**Files Modified**:
+- `nodes/loader.py`:
+  - Added pre-load cleanup (lines 231-244)
+  - Improved cleanup_resources() (lines 119-144)
+  - Added flush=True to pipeline loading prints
+
+**Status**: ⚠️ Fix implemented, needs testing
+
+**Next Steps**:
+1. Test FLUX.2 load with bias fix
+2. Test FLUX.1 load after FLUX.2 failure to verify cleanup works
+3. If still hanging, may need to investigate diffusers internals or add process isolation
+
+---
+
 ## MAJOR REFACTOR (2025-11-27 - Session 2)
 
 ### Complete Rewrite to Use ComfyUI Native Loading ✅ IN PROGRESS
