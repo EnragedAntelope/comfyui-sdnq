@@ -117,14 +117,21 @@ class SDNQModelLoader:
                 del pipeline
 
             if force:
-                # Force garbage collection
+                # Force garbage collection multiple times to ensure cleanup
+                gc.collect()
                 gc.collect()
 
-                # Clear CUDA cache
+                # Clear CUDA cache and synchronize
                 if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    # Synchronize to ensure cleanup completes
-                    torch.cuda.synchronize()
+                    try:
+                        # Synchronize all CUDA operations first
+                        torch.cuda.synchronize()
+                        # Empty cache
+                        torch.cuda.empty_cache()
+                        # Reset peak memory stats
+                        torch.cuda.reset_peak_memory_stats()
+                    except Exception as cuda_error:
+                        print(f"Warning: CUDA cleanup error: {cuda_error}")
 
                 # Reset torch dynamo (torch.compile) cache to prevent state pollution
                 # This prevents the "black image" bug from torch compile failures
@@ -132,6 +139,9 @@ class SDNQModelLoader:
                     torch._dynamo.reset()
                 except:
                     pass  # Not available in all torch versions
+
+                # Clear any remaining references
+                gc.collect()
 
         except Exception as cleanup_error:
             print(f"Warning: Error during resource cleanup: {cleanup_error}")
@@ -215,6 +225,21 @@ class SDNQModelLoader:
 
         print(f"Source: {'Local cached path' if is_local else 'HuggingFace Hub'}")
 
+        # Pre-load cleanup to clear any leftover state from previous failed loads
+        # This prevents hanging if a previous load left resources in a bad state
+        print("Pre-load cleanup...")
+        gc.collect()
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+            except:
+                pass
+        try:
+            torch._dynamo.reset()
+        except:
+            pass
+
         # Track resources for cleanup
         pipeline = None
         model_component = None
@@ -228,7 +253,8 @@ class SDNQModelLoader:
             # SDNQ pre-quantized models will be loaded with quantization preserved
             # DiffusionPipeline auto-detects the correct pipeline type from model_index.json
             # (T2I, I2I, I2V, T2V, multimodal, etc.)
-            print("Loading SDNQ model pipeline...")
+            print("Loading SDNQ model pipeline...", flush=True)
+            print("This may take a moment for large models...", flush=True)
 
             pipeline = DiffusionPipeline.from_pretrained(
                 model_path,
@@ -236,6 +262,7 @@ class SDNQModelLoader:
                 local_files_only=is_local,
             )
 
+            print(f"✓ Pipeline loading complete", flush=True)
 
             print(f"Pipeline loaded: {type(pipeline).__name__}")
 
@@ -278,9 +305,29 @@ class SDNQModelLoader:
                 print(f"     Shape: {tensor_shape}, Dtype: {tensor_dtype}")
             print(f"{'─'*60}\n")
 
-            # Convert state_dict keys if needed (diffusers → ComfyUI format)
-            # For transformers, the keys should already be compatible
-            # For UNet, may need remapping
+            # Fix SDNQ state dict for ComfyUI compatibility
+            # SDNQ models may be missing bias terms that ComfyUI's loader expects
+            print("Preparing state dict for ComfyUI compatibility...")
+
+            # Check for and add missing bias terms
+            # ComfyUI's model detection looks for x_embedder.bias, context_embedder.bias, etc.
+            bias_keys_to_check = [
+                "x_embedder.bias",
+                "context_embedder.bias",
+                "t_embedder.bias",
+                "y_embedder.bias",
+            ]
+
+            for bias_key in bias_keys_to_check:
+                weight_key = bias_key.replace(".bias", ".weight")
+                if weight_key in model_state_dict and bias_key not in model_state_dict:
+                    # Add zero bias with correct shape
+                    weight_shape = model_state_dict[weight_key].shape
+                    # bias shape is the output dimension (first dim of weight for linear layers)
+                    bias_shape = weight_shape[0] if len(weight_shape) > 1 else weight_shape[0]
+                    model_state_dict[bias_key] = torch.zeros(bias_shape, dtype=torch_dtype, device="cpu")
+                    print(f"  Added missing {bias_key} (shape: {bias_shape})")
+
             model_options = {"dtype": torch_dtype}
 
             # Load via ComfyUI's native diffusion model loader

@@ -48,6 +48,25 @@ pip install -r requirements.txt
 
 Restart ComfyUI after installation.
 
+### ⚠️ Critical: diffusers 0.36.0+ Required
+
+This node pack requires **diffusers 0.36.0 or higher** for FLUX.2, Z-Image, video models, and multimodal support.
+
+**If you see `ImportError: cannot import name 'DiffusionPipeline'` or similar errors:**
+
+```bash
+# Install latest diffusers from GitHub (0.36.0 not yet on PyPI)
+pip install git+https://github.com/huggingface/diffusers.git
+
+# Or upgrade when 0.36.0 is released:
+pip install --upgrade diffusers>=0.36.0
+```
+
+**Important Changes in diffusers 0.36.0:**
+- `AutoPipeline` class was removed
+- This node pack now uses `DiffusionPipeline` which auto-detects all pipeline types
+- Supports all model architectures: T2I, I2I, I2V, T2V, multimodal
+
 ---
 
 ## Quick Start
