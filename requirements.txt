@@ -3,8 +3,10 @@
 sdnq @ git+https://github.com/Disty0/sdnq.git
 
 # Diffusers and transformers
-# Note: FLUX.2 and newer models require diffusers>=0.35.2
-diffusers>=0.35.2
+# Recommended: diffusers>=0.35.2 for FLUX.2, video, and multimodal models
+# Minimum: diffusers>=0.20.0 (image models only, no video/multimodal support)
+# Note: AutoPipeline (for video/multimodal) requires diffusers>=0.30.0
+diffusers>=0.20.0
 transformers>=4.40.0
 
 # HuggingFace Hub integration
