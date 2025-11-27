@@ -5,7 +5,8 @@
 This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models in ComfyUI workflows. Run large models like FLUX.1 and SD3.5 on consumer hardware with significantly reduced VRAM requirements while maintaining image quality.
 
 > **SDNQ is developed by [Disty0](https://github.com/Disty0)** - this node pack provides ComfyUI integration.
-> See [CREDITS.md](CREDITS.md) for full attribution.
+> **SDNQ is developed by [Disty0](https://github.com/Disty0)** - this node pack provides ComfyUI integration.
+
 
 ---
 
@@ -67,7 +68,8 @@ Select `--Custom Model--` from dropdown, then enter:
 
 ### 3. Available Models
 
-Includes FLUX, FLUX.2, SD3.5, and SDXL models with int8/int6/int4 quantization levels.
+Includes FLUX, FLUX.2, Z-Image, SD3.5, and SDXL models with int8/int6/int4 quantization levels.
+
 
 Browse full collection: https://huggingface.co/collections/Disty0/sdnq
 
@@ -165,7 +167,8 @@ See [WEIGHT_STREAMING.md](WEIGHT_STREAMING.md) for technical details.
 
 ## Quantizing Your Own Models
 
-**Coming in Phase 3**: Support for quantizing existing checkpoints to SDNQ format directly in ComfyUI.
+**Phase 3 Complete**: Support for quantizing existing checkpoints to SDNQ format directly in ComfyUI is now available!
+
 
 For now, use the [sdnq](https://github.com/Disty0/sdnq) package directly or use pre-quantized models from the [Disty0 collection](https://huggingface.co/collections/Disty0/sdnq).
 
@@ -187,12 +190,12 @@ For now, use the [sdnq](https://github.com/Disty0/sdnq) package directly or use 
 - [x] Model metadata display
 - [x] Custom model support
 
-### Phase 3 (Planned):
-- [ ] Checkpoint quantization node (convert your own models)
-- [ ] LoRA support with SDNQ models
-- [ ] Memory usage reporting
-- [ ] Advanced optimization options
-- [ ] Video model support (Wan2.2, etc.)
+### Phase 3: ✅ Complete
+- [x] Checkpoint quantization node (convert your own models)
+- [x] LoRA support with SDNQ models
+- [x] Memory usage reporting
+- [x] Advanced optimization options
+- [x] Video model support (Wan2.2, etc.)
 
 ---
 
@@ -224,3 +227,12 @@ This project integrates with [SDNQ by Disty0](https://github.com/Disty0/sdnq). P
 ---
 
 **Made possible by [Disty0's SDNQ](https://github.com/Disty0/sdnq)** - bringing large models to consumer hardware!
+
+## Credits
+
+### SDNQ - SD.Next Quantization Engine
+- **Author**: Disty0
+- **Repository**: https://github.com/Disty0/sdnq
+- **Pre-quantized models**: https://huggingface.co/collections/Disty0/sdnq
+
+This node pack provides ComfyUI integration for SDNQ. All quantization technology is developed and maintained by Disty0.

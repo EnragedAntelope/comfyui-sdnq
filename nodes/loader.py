@@ -172,11 +172,14 @@ class SDNQModelLoader:
             # The SDNQConfig import above registers SDNQ into diffusers
             # SDNQ handles all quantization automatically through diffusers integration
             print("Loading model pipeline...")
+            print("Note: If the progress bar appears stuck, it is likely verifying files or downloading large chunks. Please wait.")
 
-            pipeline = diffusers.AutoPipelineForText2Image.from_pretrained(
+            # Use DiffusionPipeline to support custom pipelines like Flux2Pipeline
+            pipeline = diffusers.DiffusionPipeline.from_pretrained(
                 model_path,
                 torch_dtype=torch_dtype,
                 local_files_only=is_local,
+                trust_remote_code=True, # Required for custom pipelines like Flux 2
             )
 
             print(f"Pipeline loaded: {type(pipeline).__name__}")

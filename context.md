@@ -60,6 +60,21 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 **Solution**: Updated to `diffusers>=0.35.2`
 **Files**: `requirements.txt`
 
+### 6. Flux 2 Pipeline Error Fixed ✅
+**Issue**: `ValueError: AutoPipeline can't find a pipeline linked to Flux2Pipeline`
+**Solution**: Switched to `DiffusionPipeline.from_pretrained` and added `trust_remote_code=True`
+**Files**: `nodes/loader.py`
+
+### 7. File Size Accuracy Fixed ✅
+**Issue**: Flux 2 model size reported as ~9GB but downloaded ~32GB
+**Solution**: Updated registry with accurate size (~32GB) and removed misleading guesses for other models
+**Files**: `core/registry.py`
+
+### 8. Progress Bar Expectation Managed ✅
+**Issue**: Progress bar hangs at 4% during file verification/large downloads
+**Solution**: Added explicit warning to console output to manage user expectations
+**Files**: `nodes/loader.py`
+
 ---
 
 ## Completed Tasks
