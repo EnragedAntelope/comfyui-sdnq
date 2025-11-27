@@ -106,7 +106,7 @@ class SDNQCLIPWrapper:
         This matches ComfyUI's CLIP.encode_from_tokens() interface.
         
         Args:
-            tokens: Tokenized input
+            tokens: Tokenized input (BatchEncoding or dict with tensors)
             return_pooled: Whether to return pooled output (bool or "unprojected")
             return_dict: Whether to return a dictionary instead of tuple
             **kwargs: Additional encoding options
@@ -114,14 +114,27 @@ class SDNQCLIPWrapper:
         Returns:
             Encoded embeddings (and optionally pooled output)
         """
-        # Handle different token formats
-        if isinstance(tokens, dict):
-            # Already tokenized dict from diffusers tokenizer
-            inputs = {k: v.to(self.text_encoder.device) if hasattr(v, 'to') else v 
-                     for k, v in tokens.items()}
+        # Extract tensors from BatchEncoding or dict
+        # BatchEncoding is dict-like but we need to extract only the tensor keys
+        if hasattr(tokens, 'data'):
+            # BatchEncoding object - extract the underlying dict
+            token_dict = tokens.data
+        elif isinstance(tokens, dict):
+            token_dict = tokens
         else:
-            # Assume it's raw tokens
-            inputs = {"input_ids": tokens}
+            # Assume it's raw input_ids tensor
+            token_dict = {"input_ids": tokens}
+        
+        # Move tensors to text encoder's device and prepare inputs
+        # Only pass keys that the text encoder expects (input_ids, attention_mask, etc.)
+        inputs = {}
+        for key in ['input_ids', 'attention_mask', 'pixel_values']:
+            if key in token_dict:
+                value = token_dict[key]
+                if hasattr(value, 'to'):
+                    inputs[key] = value.to(self.text_encoder.device)
+                else:
+                    inputs[key] = value
         
         # Encode using text encoder
         outputs = self.text_encoder(**inputs)

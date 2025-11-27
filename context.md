@@ -35,25 +35,6 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 ## CRITICAL BUG FIXES (2025-11-27)
 
-### 1. Windows Symlink Error Fixed ✅
-**Issue**: `[WinError 1314] A required privilege is not held by the client`
-**Solution**: Added `local_dir_use_symlinks=False` and `HF_HUB_DISABLE_SYMLINKS_WARNING=1`
-**Files**: `core/downloader.py`
-
-### 2. Model Storage Location Fixed ✅
-**Issue**: Models downloading to `~/.cache/huggingface/hub` instead of ComfyUI models folder
-**Solution**: Created `get_sdnq_models_dir()` using `folder_paths`, now stores in `ComfyUI/models/diffusers/sdnq/`
-**Files**: `core/config.py`, `core/downloader.py`
-
-### 3. model_name Bug Fixed ✅
-**Issue**: `NameError: name 'model_name' is not defined`
-**Solution**: Removed unnecessary FLUX.2 detection code (see #4)
-**Files**: `nodes/loader.py`
-**Files**: `core/registry.py`, `nodes/loader.py`
-
-### 8. Progress Bar Expectation Managed ✅
-**Issue**: Progress bar hangs at 4% during file verification/large downloads
-**Solution**: Added explicit warning to console output to manage user expectations
 **Files**: `nodes/loader.py`
 
 ---
