@@ -65,9 +65,66 @@ class SDNQCLIPWrapper:
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
 
+    def tokenize(self, text, **kwargs):
+        """
+        Tokenize text for encoding.
+        
+        This matches ComfyUI's CLIP.tokenize() interface.
+        
+        Args:
+            text: Input text prompt
+            **kwargs: Additional tokenizer options
+        
+        Returns:
+            Tokenized output (format depends on tokenizer type)
+        """
+        # For diffusers tokenizers, return the tokenized output
+        if hasattr(self.tokenizer, '__call__'):
+            return self.tokenizer(text, **kwargs)
+        else:
+            raise NotImplementedError(f"Tokenizer type {type(self.tokenizer)} not supported")
+
+    def encode_from_tokens(self, tokens, return_pooled=False, **kwargs):
+        """
+        Encode tokens to embeddings.
+        
+        This matches ComfyUI's CLIP.encode_from_tokens() interface.
+        
+        Args:
+            tokens: Tokenized input
+            return_pooled: Whether to return pooled output
+            **kwargs: Additional encoding options
+        
+        Returns:
+            Encoded embeddings (and optionally pooled output)
+        """
+        # Handle different token formats
+        if isinstance(tokens, dict):
+            # Already tokenized dict from diffusers tokenizer
+            inputs = {k: v.to(self.text_encoder.device) if hasattr(v, 'to') else v 
+                     for k, v in tokens.items()}
+        else:
+            # Assume it's raw tokens
+            inputs = {"input_ids": tokens}
+        
+        # Encode using text encoder
+        outputs = self.text_encoder(**inputs)
+        
+        if return_pooled:
+            # Return both sequence output and pooled output
+            if hasattr(outputs, 'pooler_output'):
+                return outputs.last_hidden_state, outputs.pooler_output
+            elif hasattr(outputs, 'pooled_output'):
+                return outputs.last_hidden_state, outputs.pooled_output
+            else:
+                # No pooled output, return hidden state twice
+                return outputs.last_hidden_state, outputs.last_hidden_state[:, 0]
+        else:
+            return outputs.last_hidden_state
+
     def encode(self, text: str) -> torch.Tensor:
         """
-        Encode text to embeddings.
+        Encode text to embeddings in one step (convenience method).
 
         Args:
             text: Input text prompt
@@ -75,13 +132,8 @@ class SDNQCLIPWrapper:
         Returns:
             Text embeddings tensor
         """
-        # Use the pipeline's encoding mechanism
-        if hasattr(self.pipeline, 'encode_prompt'):
-            return self.pipeline.encode_prompt(text)
-        else:
-            # Fallback to direct tokenizer/encoder
-            inputs = self.tokenizer(text, return_tensors="pt", padding=True)
-            return self.text_encoder(**inputs).last_hidden_state
+        tokens = self.tokenize(text, return_tensors="pt", padding=True)
+        return self.encode_from_tokens(tokens)
 
     def get_text_encoder(self):
         """Return the underlying text encoder"""

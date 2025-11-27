@@ -37,8 +37,15 @@ This custom node pack enables loading [SDNQ (SD.Next Quantization)](https://gith
 cd ComfyUI/custom_nodes/
 git clone https://github.com/EnragedAntelope/comfyui-sdnq.git
 cd comfyui-sdnq
+
+# IMPORTANT: Install latest diffusers from git (required for Flux 2 and Z-Image)
+pip install git+https://github.com/huggingface/diffusers.git
+
+# Install other dependencies
 pip install -r requirements.txt
 ```
+
+> **⚠️ CRITICAL**: You MUST install diffusers from git to support Flux 2, Z-Image, and other latest models. The PyPI version does not include these features yet.
 
 Restart ComfyUI after installation.
 

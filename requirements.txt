@@ -1,3 +1,14 @@
+# SDNQ quantization engine (includes quantized models support)
+sdnq>=0.1.0
+
+# Diffusers library - MUST install from git for Flux 2 / Z-Image support
+# diffusers>=0.36.0 (install via: pip install git+https://github.com/huggingface/diffusers.git)
+
+# Transformers for text encoding
+transformers>=4.40.0
+
+# HuggingFace Hub integration  
+huggingface-hub>=0.20.0
 
 # Model serialization
 safetensors>=0.4.0
