@@ -16,7 +16,7 @@ from sdnq.loader import apply_sdnq_options_to_model
 from sdnq.common import use_torch_compile as triton_is_available
 
 import diffusers
-from diffusers import AutoPipeline
+from diffusers import DiffusionPipeline
 
 # Import ComfyUI modules for native model loading
 import comfy.sd
@@ -229,10 +229,11 @@ class SDNQModelLoader:
             # Load pipeline with SDNQ support
             # The SDNQConfig import above registers SDNQ into diffusers
             # SDNQ pre-quantized models will be loaded with quantization preserved
-            # AutoPipeline auto-detects the correct pipeline type (T2I, I2V, T2V, multimodal, etc.)
+            # DiffusionPipeline auto-detects the correct pipeline type from model_index.json
+            # (T2I, I2I, I2V, T2V, multimodal, etc.)
             print("Loading SDNQ model pipeline...")
 
-            pipeline = AutoPipeline.from_pretrained(
+            pipeline = DiffusionPipeline.from_pretrained(
                 model_path,
                 torch_dtype=torch_dtype,
                 local_files_only=is_local,
@@ -245,8 +246,8 @@ class SDNQModelLoader:
 
             # Get transformer/unet component
             # Note: Different pipeline types (T2I, I2I, I2V, T2V, multimodal) all use
-            # transformer or unet architecture. AutoPipeline loads the correct type:
-            # - FLUX.1/FLUX.2: Flux2Pipeline (text-to-image with optional image guidance)
+            # transformer or unet architecture. DiffusionPipeline loads the correct type:
+            # - FLUX.1/FLUX.2: FluxPipeline (text-to-image with optional image guidance)
             # - Qwen-Image-Edit: QwenImageEditPipeline (image editing, requires input image)
             # - Wan2.2: Video pipelines (I2V, T2V with temporal components)
             if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
