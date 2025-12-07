@@ -6,8 +6,10 @@ Supports both dropdown selection from catalog and custom repo IDs.
 """
 
 import os
+import sys
 import torch
 import gc
+import subprocess
 from typing import Tuple, Dict, Any, Optional
 
 # Import SDNQ config to register quantization methods with diffusers
@@ -25,6 +27,30 @@ from ..core.config import get_dtype_from_string
 from ..core.registry import get_model_names_for_dropdown, get_repo_id_from_name, get_model_info
 from ..core.downloader import download_model, check_model_cached, get_cached_model_path
 from ..core.wrapper import wrap_pipeline_components
+
+
+def check_cpp_compiler_available() -> bool:
+    """
+    Check if C++ compiler is available (required for torch.compile on Windows).
+
+    Returns:
+        True if compiler is available, False otherwise
+    """
+    if sys.platform != "win32":
+        # On Linux/Mac, gcc/clang usually available
+        return True
+
+    try:
+        # Check if cl.exe (MSVC compiler) is available on Windows
+        result = subprocess.run(
+            ["cl"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=5
+        )
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
 
 
 class SDNQModelLoader:
@@ -211,6 +237,18 @@ class SDNQModelLoader:
 
         print(f"Source: {'Local cached path' if is_local else 'HuggingFace Hub'}")
 
+        # Check if C++ compiler is available (needed for torch.compile)
+        compiler_available = check_cpp_compiler_available()
+
+        # Disable torch.compile if compiler not available
+        # SDNQ quantized models use torch.compile for dequantization by default
+        if not compiler_available:
+            print("⚠ C++ compiler not detected - disabling torch.compile for SDNQ")
+            print("  (Model will still use quantized weights with same memory savings)")
+            # Disable torch dynamo compilation
+            torch._dynamo.config.suppress_errors = True
+            torch._dynamo.config.disable = True
+
         # Pre-load cleanup to clear any leftover state from previous failed loads
         # This prevents hanging if a previous load left resources in a bad state
         print("Pre-load cleanup...")
@@ -247,10 +285,10 @@ class SDNQModelLoader:
             print(f"✓ Pipeline loading complete", flush=True)
             print(f"Pipeline loaded: {type(pipeline).__name__}")
 
-            # Apply SDNQ Triton optimizations to pipeline components (optional)
-            # This adds quantized matmul operations for faster inference
-            if use_quantized_matmul and triton_is_available:
-                print("Applying SDNQ Triton quantized matmul optimization...")
+            # Apply SDNQ optimizations to pipeline components (optional)
+            # Note: Optimizations require Triton and C++ compiler (already checked above)
+            if use_quantized_matmul and triton_is_available and compiler_available:
+                print("Applying SDNQ optimizations to all quantized components...")
                 try:
                     # Apply to transformer or unet component
                     if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
@@ -258,24 +296,51 @@ class SDNQModelLoader:
                             pipeline.transformer,
                             use_quantized_matmul=True
                         )
-                        print("✓ Triton optimizations applied to transformer")
+                        print("✓ Optimizations applied to transformer")
+
                     elif hasattr(pipeline, 'unet') and pipeline.unet is not None:
                         pipeline.unet = apply_sdnq_options_to_model(
                             pipeline.unet,
                             use_quantized_matmul=True
                         )
-                        print("✓ Triton optimizations applied to unet")
+                        print("✓ Optimizations applied to unet")
+
+                    # Apply to text encoders (FLUX.2 has quantized text encoder)
+                    if hasattr(pipeline, 'text_encoder') and pipeline.text_encoder is not None:
+                        pipeline.text_encoder = apply_sdnq_options_to_model(
+                            pipeline.text_encoder,
+                            use_quantized_matmul=True
+                        )
+                        print("✓ Optimizations applied to text_encoder")
+
+                    if hasattr(pipeline, 'text_encoder_2') and pipeline.text_encoder_2 is not None:
+                        pipeline.text_encoder_2 = apply_sdnq_options_to_model(
+                            pipeline.text_encoder_2,
+                            use_quantized_matmul=True
+                        )
+                        print("✓ Optimizations applied to text_encoder_2")
+
                 except Exception as opt_error:
-                    print(f"Warning: Could not apply Triton optimizations: {opt_error}")
-                    print("Model will still work with quantized weights, just without Triton acceleration")
+                    print(f"Warning: Could not apply optimizations: {opt_error}")
+                    print("Model will still work with quantized weights, just without optimizations")
                     # Reset torch compile state to prevent pollution
                     try:
                         torch._dynamo.reset()
                         print("✓ Torch compile state reset after optimization failure")
                     except:
                         pass
+
+            elif use_quantized_matmul and not compiler_available:
+                print("⚠ C++ compiler not found - SDNQ optimizations disabled")
+                print("  torch.compile requires Visual Studio Build Tools with C++ compiler on Windows")
+                print("  Model will still use quantized weights (same memory savings)")
+                print("  To enable optimizations:")
+                print("    1. Install Visual Studio Build Tools 2019 or later")
+                print("    2. Include 'Desktop development with C++' workload")
+                print("    3. Add cl.exe to PATH (usually in: C:\\Program Files\\Microsoft Visual Studio\\...\\VC\\Tools\\MSVC\\...\\bin\\Hostx64\\x64)")
+
             elif use_quantized_matmul and not triton_is_available:
-                print("Note: Triton not available - model uses quantized weights but not Triton kernels")
+                print("Note: Triton not available - using standard SDNQ dequantization")
 
             # Get model type from registry if available
             model_type = None
