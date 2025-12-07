@@ -33,6 +33,57 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 ---
 
+---
+
+## ✅ FIXED ISSUES - GitHub Issue Resolution (2025-11-27 - Session 3)
+
+### Issue #12: torch.compile Compiler Error ✅ FIXED (Commit: 661db1e)
+
+**Problem**:
+```
+RuntimeError: Compiler: cl is not found
+```
+
+**Solution Implemented**:
+1. Added automatic C++ compiler detection before model loading
+2. Gracefully disable torch.compile if compiler not found
+3. Model still works with quantized weights (same memory savings, slightly slower)
+4. Provides helpful setup instructions when compiler not available
+
+**Status**: ✅ Fully fixed - automatically handled
+
+---
+
+### Issue #9: hf-xet>=1.3.0 not found ✅ FIXED
+
+**Problem**: Optional dependency marked as required, causing installation failures
+
+**Solution Implemented**:
+1. Removed `hf-xet` from main requirements.txt
+2. Created `requirements-optional.txt` for optional dependencies
+3. Updated README with clear optional installation instructions
+
+**Status**: ✅ Fixed - hf-xet now properly optional
+
+---
+
+### Issue #15: Requirements Installation Conflicts ✅ FIXED
+
+**Problem**:
+- `huggingface-hub>=1.1.0` conflicted with transformers
+- Duplicate transformers version specifications
+- diffusers 0.36.0 not on PyPI
+
+**Solution Implemented**:
+1. Relaxed huggingface-hub to `>=0.20.0` (let dependencies resolve naturally)
+2. Removed duplicate transformers entry
+3. Changed diffusers to `>=0.35.0` with GitHub install instructions in comments
+4. Updated README with conflict resolution guide
+
+**Status**: ✅ Fixed - dependencies now resolve correctly
+
+---
+
 ## 🚨 CRITICAL: diffusers 0.36.0+ Breaking Changes (2025-11-27 - Session 3)
 
 ### AutoPipeline Removed in diffusers 0.36.0.dev0 ✅ FIXED

@@ -40,8 +40,11 @@ cd comfyui-sdnq
 # IMPORTANT: Install latest diffusers from git (required for Flux 2 and Z-Image)
 pip install git+https://github.com/huggingface/diffusers.git
 
-# Install other dependencies
+# Install required dependencies
 pip install -r requirements.txt
+
+# Optional: Install enhanced download speeds (requires Git LFS)
+pip install -r requirements-optional.txt
 ```
 
 > **⚠️ CRITICAL**: You MUST install diffusers from git to support Flux 2, Z-Image, and other latest models. The PyPI version does not include these features yet.
@@ -148,6 +151,28 @@ Models are cached automatically - download once, use forever!
 
 ## Troubleshooting
 
+### "C++ compiler not found" Warning (Windows)
+
+**Status**: ✅ **Automatically handled** (as of latest version)
+
+The node pack now automatically detects if a C++ compiler is available and gracefully falls back if not. You'll see:
+
+```
+⚠ C++ compiler not detected - disabling torch.compile for SDNQ
+  (Model will still use quantized weights with same memory savings)
+```
+
+**Your model will work fine!** The quantized weights are still used (same memory savings), just without torch.compile optimizations (slightly slower).
+
+**To enable full optimizations (optional):**
+
+1. Install [Visual Studio Build Tools 2019 or later](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019)
+2. During installation, select **"Desktop development with C++"** workload
+3. Add `cl.exe` to your PATH:
+   - Usually located in: `C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Tools\MSVC\{version}\bin\Hostx64\x64`
+   - Add this path to your system PATH environment variable
+4. Restart ComfyUI
+
 ### "Triton not available" Warning
 
 Triton is an optional optimization. The model will work without it, just slightly slower.
@@ -158,6 +183,36 @@ pip install triton
 ```
 
 Triton is not available on native Windows. Use WSL2 for Triton support.
+
+### "hf-xet not found" Error
+
+`hf-xet` is an **optional** dependency for faster model downloads.
+
+**Solution**: Install separately if you want faster downloads:
+```bash
+pip install -r requirements-optional.txt
+```
+
+Or skip it - downloads will work fine without it, just slower for large models.
+
+### Requirements Installation Conflicts
+
+If you encounter dependency conflicts during installation:
+
+```bash
+# ERROR: huggingface-hub conflicts with transformers
+```
+
+**Solution**: Let pip resolve dependencies automatically:
+```bash
+# Install diffusers first from GitHub
+pip install git+https://github.com/huggingface/diffusers.git
+
+# Then install requirements without strict versions
+pip install sdnq transformers safetensors accelerate --upgrade
+```
+
+The requirements.txt uses minimum versions that work together. Pip will install compatible versions automatically.
 
 ### Out of Memory Errors
 

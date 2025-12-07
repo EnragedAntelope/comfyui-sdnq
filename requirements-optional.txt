@@ -1,0 +1,8 @@
+# Optional dependencies for enhanced performance and features
+#
+# Install with: pip install -r requirements-optional.txt
+
+# HuggingFace XET for faster downloads (highly recommended but optional)
+# Requires Git LFS and XET extension
+# See: https://huggingface.co/docs/huggingface_hub/guides/download#faster-downloads
+hf-xet>=1.3.0
