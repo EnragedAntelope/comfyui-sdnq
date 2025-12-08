@@ -158,11 +158,16 @@ Models are cached automatically - download once, use forever!
 The node pack now automatically detects if a C++ compiler is available and gracefully falls back if not. You'll see:
 
 ```
-⚠ C++ compiler not detected - disabling torch.compile for SDNQ
-  (Model will still use quantized weights with same memory savings)
+⚠ C++ compiler not detected - torch.compile will use fallback mode
+  Model will still run on GPU with quantized weights (same VRAM usage)
+  Compilation errors will be suppressed and execution will continue
 ```
 
-**Your model will work fine!** The quantized weights are still used (same memory savings), just without torch.compile optimizations (slightly slower).
+**Your model will work fine!**
+- ✅ **GPU/VRAM still used** (same memory savings)
+- ✅ **Quantized weights preserved** (same efficiency)
+- ✅ **Runs on GPU** in eager mode (slightly slower than compiled)
+- ⚠️ Only difference: No torch.compile optimizations (10-20% slower)
 
 **To enable full optimizations (optional):**
 
