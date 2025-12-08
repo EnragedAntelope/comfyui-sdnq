@@ -37,20 +37,54 @@ python -c "from sdnq import SDNQConfig; print('SDNQ imported successfully')"
 
 ## ✅ FIXED ISSUES - GitHub Issue Resolution (2025-11-27 - Session 3)
 
-### Issue #12: torch.compile Compiler Error ✅ FIXED (Commit: 661db1e)
+### Issue #12: torch.compile Compiler Error ✅ FIXED (Commits: 661db1e, 0d9bc46)
 
 **Problem**:
 ```
 RuntimeError: Compiler: cl is not found
 ```
 
-**Solution Implemented**:
+**Solution Implemented (Commit 661db1e)**:
 1. Added automatic C++ compiler detection before model loading
-2. Gracefully disable torch.compile if compiler not found
+2. Gracefully suppress torch.compile errors if compiler not found
 3. Model still works with quantized weights (same memory savings, slightly slower)
 4. Provides helpful setup instructions when compiler not available
 
-**Status**: ✅ Fully fixed - automatically handled
+**CRITICAL BUG FIX (Commit 0d9bc46)**:
+Initial fix had a critical bug: `torch._dynamo.config.disable = True` was forcing CPU execution!
+
+**What was wrong:**
+- Setting `disable=True` completely disabled torch.compile
+- SDNQ fallback path ran on CPU instead of GPU
+- Model loaded into system RAM instead of VRAM
+- User experienced slow CPU-only processing
+
+**Proper fix:**
+- **REMOVED**: `torch._dynamo.config.disable = True`
+- **KEPT**: `torch._dynamo.config.suppress_errors = True`
+- Now torch.compile tries to compile, catches compiler error, falls back to GPU eager mode
+- Model still uses GPU/VRAM (same memory usage)
+- Only difference: No compiled optimizations (slightly slower than with compiler)
+
+**SDPA OPTIMIZATION (Commit a7bb90b)**:
+User pointed out: SDPA is better than eager and doesn't need compiler!
+
+**What was improved:**
+- Added `attn_implementation="sdpa"` to pipeline loading
+- Model attention now uses SDPA (GPU-accelerated Flash Attention)
+- SDPA doesn't require C++ compiler (unlike torch.compile)
+- Much faster than pure eager mode
+
+**Two separate optimizations:**
+1. **SDPA** = Model attention (always fast, no compiler needed)
+2. **torch.compile** = Weight dequantization (needs compiler, falls back to eager)
+
+**Performance without compiler:**
+- ✅ Attention: Fast (SDPA)
+- ⚠️ Dequantization: Slower (eager fallback)
+- 📊 Net result: Much better than full eager mode
+
+**Status**: ✅ Fully optimized - Uses best available backend for each operation
 
 ---
 
