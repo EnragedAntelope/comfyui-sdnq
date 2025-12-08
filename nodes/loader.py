@@ -240,14 +240,20 @@ class SDNQModelLoader:
         # Check if C++ compiler is available (needed for torch.compile)
         compiler_available = check_cpp_compiler_available()
 
-        # Disable torch.compile if compiler not available
+        # Configure torch.compile error handling
         # SDNQ quantized models use torch.compile for dequantization by default
         if not compiler_available:
-            print("⚠ C++ compiler not detected - disabling torch.compile for SDNQ")
-            print("  (Model will still use quantized weights with same memory savings)")
-            # Disable torch dynamo compilation
+            print("⚠ C++ compiler not detected - torch.compile will use fallback mode")
+            print("  Model will still run on GPU with quantized weights (same VRAM usage)")
+            print("  Compilation errors will be suppressed and execution will continue")
+
+            # Suppress compilation errors - let torch.compile fail gracefully and fall back to eager mode
+            # CRITICAL: We do NOT disable torch.compile entirely (that would force CPU execution)
+            # Instead, we let it TRY to compile, catch errors, and fall back to GPU eager mode
             torch._dynamo.config.suppress_errors = True
-            torch._dynamo.config.disable = True
+
+            # Optional: Set verbose to False to reduce error spam
+            torch._dynamo.config.verbose = False
 
         # Pre-load cleanup to clear any leftover state from previous failed loads
         # This prevents hanging if a previous load left resources in a bad state
