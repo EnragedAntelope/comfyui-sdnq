@@ -66,7 +66,25 @@ Initial fix had a critical bug: `torch._dynamo.config.disable = True` was forcin
 - Model still uses GPU/VRAM (same memory usage)
 - Only difference: No compiled optimizations (slightly slower than with compiler)
 
-**Status**: ✅ Fully fixed - GPU execution preserved, compiler errors gracefully handled
+**SDPA OPTIMIZATION (Commit a7bb90b)**:
+User pointed out: SDPA is better than eager and doesn't need compiler!
+
+**What was improved:**
+- Added `attn_implementation="sdpa"` to pipeline loading
+- Model attention now uses SDPA (GPU-accelerated Flash Attention)
+- SDPA doesn't require C++ compiler (unlike torch.compile)
+- Much faster than pure eager mode
+
+**Two separate optimizations:**
+1. **SDPA** = Model attention (always fast, no compiler needed)
+2. **torch.compile** = Weight dequantization (needs compiler, falls back to eager)
+
+**Performance without compiler:**
+- ✅ Attention: Fast (SDPA)
+- ⚠️ Dequantization: Slower (eager fallback)
+- 📊 Net result: Much better than full eager mode
+
+**Status**: ✅ Fully optimized - Uses best available backend for each operation
 
 ---
 

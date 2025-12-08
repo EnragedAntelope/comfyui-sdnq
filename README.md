@@ -158,16 +158,27 @@ Models are cached automatically - download once, use forever!
 The node pack now automatically detects if a C++ compiler is available and gracefully falls back if not. You'll see:
 
 ```
-⚠ C++ compiler not detected - torch.compile will use fallback mode
-  Model will still run on GPU with quantized weights (same VRAM usage)
-  Compilation errors will be suppressed and execution will continue
+⚠ C++ compiler not detected - using fallback mode for SDNQ optimizations
+  ✓ Model attention: SDPA (GPU-accelerated, no compiler needed)
+  ✓ Weight dequantization: Eager mode (GPU, slightly slower)
+  ✓ VRAM usage: Same as with compiler
+  ⚠ Performance: ~10-20% slower than with compiler optimizations
 ```
 
-**Your model will work fine!**
+**Your model will work great!**
 - ✅ **GPU/VRAM still used** (same memory savings)
 - ✅ **Quantized weights preserved** (same efficiency)
-- ✅ **Runs on GPU** in eager mode (slightly slower than compiled)
-- ⚠️ Only difference: No torch.compile optimizations (10-20% slower)
+- ✅ **SDPA attention** - GPU-accelerated, no compiler needed (fast!)
+- ⚠️ **Weight dequantization** - Eager mode fallback (slightly slower)
+- 📊 **Net performance**: Much better than full eager mode
+
+**What's the difference?**
+- **SDPA** (Scaled Dot Product Attention) = Optimized GPU attention kernels (Flash Attention)
+  - ✅ Always used for model attention (no compiler needed)
+  - ✅ Very fast on modern GPUs
+- **torch.compile** = JIT compilation for weight dequantization
+  - ⚠️ Requires C++ compiler
+  - ⚠️ Falls back to eager mode if compiler missing
 
 **To enable full optimizations (optional):**
 
