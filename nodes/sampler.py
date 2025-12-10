@@ -278,12 +278,12 @@ class SDNQSampler:
 
                 "use_torch_compile": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Enable torch.compile for 1.8-3.3x speedup (RTX 4090: 32s→10s). First run adds ~60s compilation (one-time), then all subsequent runs are much faster. Requires PyTorch 2.0+. NOTE: SDPA (scaled dot product attention) is already enabled by default in PyTorch 2.0+ for automatic optimization."
+                    "tooltip": "Enable torch.compile for 1.8-3.3x speedup (RTX 4090: 32s→10s). ⚠️ CRITICAL: Only works with memory_mode='gpu' (full GPU mode). Incompatible with 'balanced' or 'lowvram' modes. First run adds ~60s compilation (one-time). Requires PyTorch 2.0+. NOTE: SDPA is already enabled by default for automatic optimization."
                 }),
 
                 "use_xformers": ("BOOLEAN", {
-                    "default": True,
-                    "tooltip": "Enable xFormers memory-efficient attention for 10-45% speedup (especially RTX 4090). Requires: pip install xformers. Graceful fallback to SDPA if not available. Recommended: keep enabled."
+                    "default": False,
+                    "tooltip": "Enable xFormers memory-efficient attention for 10-45% speedup. Disabled by default due to compatibility issues with some GPU/model combinations. Auto-fallback to SDPA if unavailable. Try enabling if you have 'pip install xformers' and experience no crashes."
                 }),
 
                 "enable_vae_tiling": ("BOOLEAN", {
@@ -492,7 +492,8 @@ class SDNQSampler:
                 pipeline,
                 use_torch_compile=use_torch_compile,
                 use_xformers=use_xformers,
-                enable_vae_tiling=enable_vae_tiling
+                enable_vae_tiling=enable_vae_tiling,
+                memory_mode=memory_mode
             )
 
             return pipeline
@@ -511,8 +512,9 @@ class SDNQSampler:
 
     def apply_performance_optimizations(self, pipeline: DiffusionPipeline,
                                        use_torch_compile: bool = False,
-                                       use_xformers: bool = True,
-                                       enable_vae_tiling: bool = False):
+                                       use_xformers: bool = False,
+                                       enable_vae_tiling: bool = False,
+                                       memory_mode: str = "gpu"):
         """
         Apply performance optimizations with graceful error handling.
 
@@ -524,6 +526,7 @@ class SDNQSampler:
             use_torch_compile: Enable torch.compile for 1.8-3.3x speedup (first-run overhead)
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images (prevents OOM)
+            memory_mode: Memory mode to check torch.compile compatibility
 
         Based on verified APIs from:
         - https://pytorch.org/blog/torch-compile-and-diffusers-a-hands-on-guide-to-peak-performance/
@@ -541,39 +544,50 @@ class SDNQSampler:
                 pipeline.enable_xformers_memory_efficient_attention()
                 print("[SDNQ Sampler] ✓ xFormers memory-efficient attention enabled")
             except Exception as e:
-                print(f"[SDNQ Sampler] ⚠️  xFormers not available, using SDPA (default): {e}")
+                # xFormers not available or incompatible - fall back to SDPA
+                # This is expected and not an error
+                print(f"[SDNQ Sampler] ℹ️  xFormers not available, using SDPA (default PyTorch 2.0+ optimization)")
+                # Note: Not printing full error to avoid clutter since SDPA fallback is automatic
         else:
             print("[SDNQ Sampler] Using SDPA (scaled dot product attention, default in PyTorch 2.0+)")
 
         # 2. torch.compile - Highest impact optimization
         #    Expected: 1.8-3.3x speedup (official benchmarks)
         #    Trade-off: First-run compilation overhead (~60s)
-        #    Modes: "max-autotune" = best for latency (uses inductor + CUDA graphs)
+        #    CRITICAL: Only compatible with memory_mode="gpu" (full GPU mode)
+        #    Incompatible with CPU offloading (balanced/lowvram modes)
         if use_torch_compile:
-            try:
-                print("[SDNQ Sampler] Compiling model (first run only, ~60s)...")
+            # Check memory mode compatibility
+            if memory_mode != "gpu":
+                print(f"[SDNQ Sampler] ⚠️  torch.compile is incompatible with memory_mode='{memory_mode}'")
+                print(f"[SDNQ Sampler] ⚠️  torch.compile requires memory_mode='gpu' (full GPU mode)")
+                print(f"[SDNQ Sampler] ⚠️  Skipping torch.compile to prevent crash. Change memory_mode to 'gpu' to enable.")
+                print(f"[SDNQ Sampler] ℹ️  Reason: torch.compile cannot trace through CPU offloading hooks")
+            else:
+                try:
+                    print("[SDNQ Sampler] Compiling model (first run only, ~60s)...")
 
-                # Set memory format for optimal performance
-                # channels_last improves performance on modern GPUs
-                pipeline.transformer.to(memory_format=torch.channels_last)
+                    # Set memory format for optimal performance
+                    # channels_last improves performance on modern GPUs
+                    pipeline.transformer.to(memory_format=torch.channels_last)
 
-                # Compile transformer (main bottleneck in diffusion models)
-                pipeline.transformer = torch.compile(
-                    pipeline.transformer,
-                    mode="max-autotune",  # Best for latency (slower compile, faster runtime)
-                    fullgraph=True        # Compile entire graph for maximum speedup
-                )
+                    # Compile transformer (main bottleneck in diffusion models)
+                    pipeline.transformer = torch.compile(
+                        pipeline.transformer,
+                        mode="max-autotune",  # Best for latency (slower compile, faster runtime)
+                        fullgraph=True        # Compile entire graph for maximum speedup
+                    )
 
-                # Compile VAE decoder (speedup for final image decoding)
-                pipeline.vae.decode = torch.compile(
-                    pipeline.vae.decode,
-                    mode="max-autotune",
-                    fullgraph=True
-                )
+                    # Compile VAE decoder (speedup for final image decoding)
+                    pipeline.vae.decode = torch.compile(
+                        pipeline.vae.decode,
+                        mode="max-autotune",
+                        fullgraph=True
+                    )
 
-                print("[SDNQ Sampler] ✓ torch.compile enabled (warmup on first generation)")
-            except Exception as e:
-                print(f"[SDNQ Sampler] ⚠️  torch.compile failed, continuing without: {e}")
+                    print("[SDNQ Sampler] ✓ torch.compile enabled (warmup on first generation)")
+                except Exception as e:
+                    print(f"[SDNQ Sampler] ⚠️  torch.compile failed, continuing without: {e}")
 
         # 3. VAE tiling for large images
         #    Purpose: Decode large images without OOM
@@ -891,7 +905,7 @@ class SDNQSampler:
                 negative_prompt: str, steps: int, cfg: float, width: int, height: int,
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
-                use_torch_compile: bool = False, use_xformers: bool = True,
+                use_torch_compile: bool = False, use_xformers: bool = False,
                 enable_vae_tiling: bool = False) -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.

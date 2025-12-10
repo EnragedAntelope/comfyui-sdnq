@@ -54,11 +54,11 @@ def test_parameter_defaults():
         return False
     print("✅ PASS: use_torch_compile default is False")
 
-    # Check use_xformers default (should be True for automatic benefit)
-    if '"default": True' not in content.split('"use_xformers"')[1].split('}')[0]:
-        print("❌ FAIL: use_xformers default not True")
+    # Check use_xformers default (should be False for safety/compatibility)
+    if '"default": False' not in content.split('"use_xformers"')[1].split('}')[0]:
+        print("❌ FAIL: use_xformers default not False")
         return False
-    print("✅ PASS: use_xformers default is True")
+    print("✅ PASS: use_xformers default is False (safe default)")
 
     # Check enable_vae_tiling default (should be False, only for large images)
     if '"default": False' not in content.split('"enable_vae_tiling"')[1].split('}')[0]:
@@ -310,10 +310,48 @@ def test_cache_tracking():
     return True
 
 
+def test_memory_mode_compatibility():
+    """Test that torch.compile checks memory_mode compatibility"""
+    print("\n" + "=" * 60)
+    print("TEST 9: Verifying memory_mode compatibility check")
+    print("=" * 60)
+
+    sampler_file = Path(__file__).parent / "nodes" / "sampler.py"
+    content = sampler_file.read_text()
+
+    # Check that apply_performance_optimizations accepts memory_mode parameter
+    optimization_method = content.split("def apply_performance_optimizations(self")[1].split("):")[0]
+    if "memory_mode" not in optimization_method:
+        print("❌ FAIL: apply_performance_optimizations doesn't accept memory_mode parameter")
+        return False
+    print("✅ PASS: apply_performance_optimizations accepts memory_mode parameter")
+
+    # Check that torch.compile has memory mode check
+    if 'if memory_mode != "gpu":' not in content:
+        print("❌ FAIL: torch.compile doesn't check memory_mode compatibility")
+        return False
+    print("✅ PASS: torch.compile checks if memory_mode == 'gpu'")
+
+    # Check that warning is printed for incompatible mode
+    if "torch.compile is incompatible with memory_mode" not in content:
+        print("❌ FAIL: No warning for incompatible memory_mode")
+        return False
+    print("✅ PASS: Warning printed for incompatible memory modes")
+
+    # Check that memory_mode is passed to apply_performance_optimizations
+    load_pipeline_body = content.split("def load_pipeline(self")[1].split("def apply_performance_optimizations")[0]
+    if "memory_mode=memory_mode" not in load_pipeline_body:
+        print("❌ FAIL: memory_mode not passed to apply_performance_optimizations()")
+        return False
+    print("✅ PASS: memory_mode passed to apply_performance_optimizations()")
+
+    return True
+
+
 def test_syntax():
     """Test Python syntax is valid"""
     print("\n" + "=" * 60)
-    print("TEST 9: Verifying Python syntax")
+    print("TEST 10: Verifying Python syntax")
     print("=" * 60)
 
     sampler_file = Path(__file__).parent / "nodes" / "sampler.py"
@@ -344,6 +382,7 @@ def main():
         test_load_pipeline_signature,
         test_generate_signature,
         test_cache_tracking,
+        test_memory_mode_compatibility,
         test_syntax,
     ]
 
