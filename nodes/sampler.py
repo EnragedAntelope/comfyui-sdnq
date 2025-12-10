@@ -17,7 +17,16 @@ import numpy as np
 from PIL import Image
 import traceback
 import sys
+import os
 from typing import Optional, Tuple, Dict, Any
+
+# ComfyUI imports for LoRA folder access
+try:
+    import folder_paths
+    COMFYUI_AVAILABLE = True
+except ImportError:
+    COMFYUI_AVAILABLE = False
+    print("[SDNQ Sampler] Warning: folder_paths not available - LoRA dropdown will be disabled")
 
 # SDNQ import - registers SDNQ support into diffusers
 from sdnq import SDNQConfig
@@ -25,8 +34,26 @@ from sdnq import SDNQConfig
 # diffusers pipeline - auto-detects model type from model_index.json
 from diffusers import DiffusionPipeline
 
-# Scheduler imports - only flow-match schedulers work with FLUX
+# Scheduler imports
+# Flow-match schedulers (for FLUX, SD3, Qwen, Z-Image)
 from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
+
+# Traditional diffusion schedulers (for SDXL, SD1.5, etc.)
+from diffusers.schedulers import (
+    DDIMScheduler,
+    DDPMScheduler,
+    PNDMScheduler,
+    LMSDiscreteScheduler,
+    EulerDiscreteScheduler,
+    HeunDiscreteScheduler,
+    EulerAncestralDiscreteScheduler,
+    DPMSolverMultistepScheduler,
+    DPMSolverSinglestepScheduler,
+    KDPM2DiscreteScheduler,
+    KDPM2AncestralDiscreteScheduler,
+    DEISMultistepScheduler,
+    UniPCMultistepScheduler,
+)
 
 # Local imports for model catalog and downloading
 from ..core.registry import (
@@ -74,33 +101,85 @@ class SDNQSampler:
         """
         Define node inputs following ComfyUI V3 conventions with V1 compatibility.
 
-        All parameters verified from diffusers FLUX examples:
-        https://huggingface.co/docs/diffusers/main/api/pipelines/flux
+        Parameters organized logically:
+        1. Model Selection (what to use)
+        2. Generation Prompts (what to create)
+        3. Generation Settings (how to create)
+        4. Model Configuration (technical settings)
+        5. Enhancements (optional improvements)
+
+        All parameters verified from diffusers documentation.
         """
         # Get model names from catalog
         model_names = get_model_names_for_dropdown()
 
+        # Get available LoRAs from ComfyUI loras folder
+        lora_list = ["[None]", "[Custom Path]"]
+        if COMFYUI_AVAILABLE:
+            try:
+                available_loras = folder_paths.get_filename_list("loras")
+                lora_list.extend(available_loras)
+            except Exception as e:
+                print(f"[SDNQ Sampler] Warning: Could not load LoRA list: {e}")
+
+        # Scheduler options
+        # Flow-based schedulers ONLY work with FLUX/SD3/Qwen/Z-Image models
+        # Traditional schedulers ONLY work with SDXL/SD1.5 models
+        scheduler_list = [
+            # Flow-based (for FLUX, SD3, Qwen, Z-Image)
+            "FlowMatchEulerDiscreteScheduler",
+            # Traditional diffusion (for SDXL, SD1.5) - Top 10 most popular
+            "DPMSolverMultistepScheduler",
+            "UniPCMultistepScheduler",
+            "EulerDiscreteScheduler",
+            "EulerAncestralDiscreteScheduler",
+            "DDIMScheduler",
+            "HeunDiscreteScheduler",
+            "KDPM2DiscreteScheduler",
+            "KDPM2AncestralDiscreteScheduler",
+            "DPMSolverSinglestepScheduler",
+            "DEISMultistepScheduler",
+            "LMSDiscreteScheduler",
+            "DDPMScheduler",
+            "PNDMScheduler",
+        ]
+
         return {
             "required": {
-                # Model selection - dropdown with pre-configured models
+                # ============================================================
+                # GROUP 1: MODEL SELECTION (What to use)
+                # ============================================================
+
                 "model_selection": (["[Custom Path]"] + model_names, {
                     "default": model_names[0] if model_names else "[Custom Path]",
                     "tooltip": "Select a pre-configured SDNQ model (auto-downloads from HuggingFace) or choose [Custom Path] to specify a local model directory"
                 }),
 
-                # Custom model path (used when model_selection is "[Custom Path]")
                 "custom_model_path": ("STRING", {
                     "default": "",
                     "multiline": False,
                     "tooltip": "Local path to SDNQ model directory (only used when [Custom Path] is selected). Example: /path/to/model or C:\\path\\to\\model"
                 }),
 
-                # Generation parameters
+                # ============================================================
+                # GROUP 2: GENERATION PROMPTS (What to create)
+                # ============================================================
+
                 "prompt": ("STRING", {
                     "default": "",
                     "multiline": True,
                     "tooltip": "Text description of the image to generate. Be descriptive for best results."
                 }),
+
+                "negative_prompt": ("STRING", {
+                    "default": "blurry, low quality, distorted, deformed, ugly, bad anatomy, bad hands, text, watermark, signature",
+                    "multiline": True,
+                    "tooltip": "What to avoid in the image. Default includes common quality issues. Clear this for no negative prompt. Note: FLUX-schnell (cfg=0) ignores negative prompts."
+                }),
+
+                # ============================================================
+                # GROUP 3: GENERATION SETTINGS (How to create)
+                # ============================================================
 
                 "steps": ("INT", {
                     "default": 25,
@@ -115,10 +194,9 @@ class SDNQSampler:
                     "min": 0.0,
                     "max": 30.0,
                     "step": 0.1,
-                    "tooltip": "Guidance scale - how closely to follow the prompt. Higher = more literal. FLUX-schnell uses 0.0, others typically 3.5-7.0."
+                    "tooltip": "Guidance scale - how closely to follow the prompt. Higher = more literal. FLUX-schnell uses 0.0, FLUX-dev uses 3.5-7.0, SDXL uses 7.0-9.0."
                 }),
 
-                # Image dimensions (must be multiple of 8)
                 "width": ("INT", {
                     "default": 1024,
                     "min": 64,
@@ -135,57 +213,59 @@ class SDNQSampler:
                     "tooltip": "Image height in pixels. Must be multiple of 8. Larger = more VRAM usage. 1024 is standard for FLUX/SDXL."
                 }),
 
-                # Reproducibility
                 "seed": ("INT", {
                     "default": 0,
                     "min": 0,
                     "max": 0xffffffffffffffff,
-                    "tooltip": "Random seed for reproducible generation. Same seed + settings = same image. Use -1 for random."
+                    "tooltip": "Random seed for reproducible generation. Same seed + settings = same image."
                 }),
 
-                # Data type selection
+                "scheduler": (scheduler_list, {
+                    "default": "DPMSolverMultistepScheduler",
+                    "tooltip": "⚠️ IMPORTANT: Use FlowMatchEulerDiscreteScheduler for FLUX/SD3/Qwen/Z-Image. Use DPMSolver/Euler/UniPC for SDXL/SD1.5. Wrong scheduler = broken images!"
+                }),
+
+                # ============================================================
+                # GROUP 4: MODEL CONFIGURATION (Technical settings)
+                # ============================================================
+
                 "dtype": (["bfloat16", "float16", "float32"], {
                     "default": "bfloat16",
                     "tooltip": "Model precision. bfloat16 recommended for FLUX (best quality/speed). float16 for older GPUs. float32 for CPU."
                 }),
 
-                # Memory management strategy
                 "memory_mode": (["gpu", "balanced", "lowvram"], {
                     "default": "balanced",
-                    "tooltip": "Memory management: 'gpu' = All on GPU (fastest, needs 24GB+ VRAM). 'balanced' = Model offloading (good for 12-16GB VRAM). 'lowvram' = Sequential offloading (slowest, works with 8GB VRAM)."
+                    "tooltip": "Memory management: 'gpu' = All on GPU (fastest, needs 24GB+ VRAM). 'balanced' = Model offloading (12-16GB VRAM). 'lowvram' = Sequential offloading (8GB VRAM, slowest)."
                 }),
 
-                # Auto-download control
                 "auto_download": ("BOOLEAN", {
                     "default": True,
                     "tooltip": "Automatically download model from HuggingFace if not found locally. Disable to only use local models."
                 }),
             },
             "optional": {
-                "negative_prompt": ("STRING", {
-                    "default": "",
-                    "multiline": True,
-                    "tooltip": "What to avoid in the image. Not all models support negative prompts (FLUX-schnell ignores them)."
+                # ============================================================
+                # GROUP 5: ENHANCEMENTS (Optional improvements)
+                # ============================================================
+
+                "lora_selection": (lora_list, {
+                    "default": "[None]",
+                    "tooltip": "Select LoRA from ComfyUI loras folder ([None] = disabled, [Custom Path] = use custom path below). LoRAs add styles or concepts to generation."
                 }),
 
-                # LoRA support
-                "lora_path": ("STRING", {
+                "lora_custom_path": ("STRING", {
                     "default": "",
                     "multiline": False,
-                    "tooltip": "Path to LoRA file (.safetensors). Leave empty to not use LoRA. Supports local paths or HuggingFace repo IDs."
+                    "tooltip": "Custom LoRA path or HuggingFace repo ID (only used when [Custom Path] is selected). Example: /path/to/lora.safetensors or username/lora-repo"
                 }),
+
                 "lora_strength": ("FLOAT", {
                     "default": 1.0,
                     "min": -5.0,
                     "max": 5.0,
                     "step": 0.05,
                     "tooltip": "LoRA influence strength. 1.0 = full strength, 0.5 = half strength, 0.0 = disabled. Negative values invert the LoRA effect. Range: -5.0 to +5.0."
-                }),
-
-                # Scheduler selection
-                "scheduler": (["FlowMatchEulerDiscreteScheduler"], {
-                    "default": "FlowMatchEulerDiscreteScheduler",
-                    "tooltip": "Denoising scheduler algorithm. FLUX models use FlowMatchEulerDiscreteScheduler (only flow-match scheduler that works). More schedulers will be added when diffusers supports them."
                 }),
             }
         }
@@ -498,7 +578,22 @@ class SDNQSampler:
         try:
             # Map scheduler name to class
             scheduler_map = {
+                # Flow-based schedulers (FLUX, SD3, Qwen, Z-Image)
                 "FlowMatchEulerDiscreteScheduler": FlowMatchEulerDiscreteScheduler,
+                # Traditional diffusion schedulers (SDXL, SD1.5)
+                "DPMSolverMultistepScheduler": DPMSolverMultistepScheduler,
+                "UniPCMultistepScheduler": UniPCMultistepScheduler,
+                "EulerDiscreteScheduler": EulerDiscreteScheduler,
+                "EulerAncestralDiscreteScheduler": EulerAncestralDiscreteScheduler,
+                "DDIMScheduler": DDIMScheduler,
+                "HeunDiscreteScheduler": HeunDiscreteScheduler,
+                "KDPM2DiscreteScheduler": KDPM2DiscreteScheduler,
+                "KDPM2AncestralDiscreteScheduler": KDPM2AncestralDiscreteScheduler,
+                "DPMSolverSinglestepScheduler": DPMSolverSinglestepScheduler,
+                "DEISMultistepScheduler": DEISMultistepScheduler,
+                "LMSDiscreteScheduler": LMSDiscreteScheduler,
+                "DDPMScheduler": DDPMScheduler,
+                "PNDMScheduler": PNDMScheduler,
             }
 
             if scheduler_name not in scheduler_map:
@@ -521,9 +616,11 @@ class SDNQSampler:
                 f"Error: {str(e)}\n\n"
                 f"Requested scheduler: {scheduler_name}\n\n"
                 f"Troubleshooting:\n"
-                f"1. Ensure scheduler is compatible with the model\n"
-                f"2. FLUX models only support FlowMatchEulerDiscreteScheduler\n"
-                f"3. Check diffusers version (requires >=0.36.0)"
+                f"1. Ensure scheduler is compatible with the model type\n"
+                f"2. FLUX/SD3/Qwen/Z-Image: Use FlowMatchEulerDiscreteScheduler\n"
+                f"3. SDXL/SD1.5: Use DPMSolver, Euler, UniPC, or DDIM\n"
+                f"4. Wrong scheduler type will produce broken/corrupted images\n"
+                f"5. Check diffusers version (requires >=0.36.0)"
             )
 
     def generate_image(self, pipeline: DiffusionPipeline, prompt: str, negative_prompt: str,
@@ -662,10 +759,9 @@ class SDNQSampler:
         return tensor
 
     def generate(self, model_selection: str, custom_model_path: str, prompt: str,
-                steps: int, cfg: float, width: int, height: int, seed: int,
-                dtype: str, memory_mode: str = "gpu", auto_download: bool = True,
-                negative_prompt: str = "", lora_path: str = "", lora_strength: float = 1.0,
-                scheduler: str = "FlowMatchEulerDiscreteScheduler") -> Tuple[torch.Tensor]:
+                negative_prompt: str, steps: int, cfg: float, width: int, height: int,
+                seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
+                lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0) -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -675,18 +771,19 @@ class SDNQSampler:
             model_selection: Selected model from dropdown
             custom_model_path: Custom model path (if [Custom Path] selected)
             prompt: Text prompt
+            negative_prompt: Negative prompt
             steps: Inference steps
             cfg: Guidance scale
             width: Image width
             height: Image height
             seed: Random seed
+            scheduler: Scheduler algorithm name
             dtype: Data type string
             memory_mode: Memory management mode ("gpu", "balanced", "lowvram")
             auto_download: Whether to auto-download models
-            negative_prompt: Optional negative prompt
-            lora_path: Optional LoRA file path or HuggingFace repo ID
+            lora_selection: Selected LoRA from dropdown ([None], [Custom Path], or filename)
+            lora_custom_path: Custom LoRA path (used when [Custom Path] selected)
             lora_strength: LoRA influence strength (-5.0 to +5.0)
-            scheduler: Scheduler algorithm name ("FlowMatchEulerDiscreteScheduler")
 
         Returns:
             Tuple containing (IMAGE,) in ComfyUI format
@@ -730,6 +827,32 @@ class SDNQSampler:
                 print(f"[SDNQ Sampler] Using cached pipeline")
 
             # Step 2.5: Handle LoRA loading/unloading
+            # Resolve actual LoRA path from lora_selection and lora_custom_path
+            lora_path = None
+            if lora_selection == "[None]":
+                lora_path = None
+            elif lora_selection == "[Custom Path]":
+                lora_path = lora_custom_path if lora_custom_path and lora_custom_path.strip() else None
+            else:
+                # User selected a LoRA from the dropdown
+                # Build full path from ComfyUI loras folder
+                if COMFYUI_AVAILABLE:
+                    try:
+                        lora_folders = folder_paths.get_folder_paths("loras")
+                        if lora_folders:
+                            # Try to find the file in lora folders
+                            for lora_folder in lora_folders:
+                                potential_path = os.path.join(lora_folder, lora_selection)
+                                if os.path.exists(potential_path):
+                                    lora_path = potential_path
+                                    break
+                            if not lora_path:
+                                # Fallback: use first folder + filename
+                                lora_path = os.path.join(lora_folders[0], lora_selection)
+                    except Exception as e:
+                        print(f"[SDNQ Sampler] Warning: Could not resolve LoRA path: {e}")
+                        lora_path = lora_selection  # Try using it as-is
+
             # Check if LoRA configuration has changed
             lora_changed = (lora_path != self.current_lora_path or
                            lora_strength != self.current_lora_strength)
