@@ -25,6 +25,9 @@ from sdnq import SDNQConfig
 # diffusers pipeline - auto-detects model type from model_index.json
 from diffusers import DiffusionPipeline
 
+# Scheduler imports - only flow-match schedulers work with FLUX
+from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
+
 # Local imports for model catalog and downloading
 from ..core.registry import (
     get_model_names_for_dropdown,
@@ -61,6 +64,7 @@ class SDNQSampler:
         self.current_model_path = None
         self.current_dtype = None
         self.current_memory_mode = None
+        self.current_scheduler = None
         self.current_lora_path = None
         self.current_lora_strength = None
         self.interrupted = False
@@ -172,10 +176,16 @@ class SDNQSampler:
                 }),
                 "lora_strength": ("FLOAT", {
                     "default": 1.0,
-                    "min": 0.0,
-                    "max": 2.0,
+                    "min": -5.0,
+                    "max": 5.0,
                     "step": 0.05,
-                    "tooltip": "LoRA influence strength. 1.0 = full strength, 0.5 = half strength, 0.0 = disabled. Higher values increase LoRA effect."
+                    "tooltip": "LoRA influence strength. 1.0 = full strength, 0.5 = half strength, 0.0 = disabled. Negative values invert the LoRA effect. Range: -5.0 to +5.0."
+                }),
+
+                # Scheduler selection
+                "scheduler": (["FlowMatchEulerDiscreteScheduler"], {
+                    "default": "FlowMatchEulerDiscreteScheduler",
+                    "tooltip": "Denoising scheduler algorithm. FLUX models use FlowMatchEulerDiscreteScheduler (only flow-match scheduler that works). More schedulers will be added when diffusers supports them."
                 }),
             }
         }
@@ -466,6 +476,56 @@ class SDNQSampler:
             # Non-critical error, just log it
             print(f"[SDNQ Sampler] Warning: Failed to unload LoRA: {e}")
 
+    def swap_scheduler(self, pipeline: DiffusionPipeline, scheduler_name: str):
+        """
+        Swap the pipeline's scheduler.
+
+        Uses the from_config() pattern to create a new scheduler with the same
+        configuration as the current scheduler but with different algorithm.
+
+        Args:
+            pipeline: Loaded diffusers pipeline
+            scheduler_name: Name of scheduler to use
+
+        Raises:
+            Exception: If scheduler swap fails
+
+        Based on verified API from:
+        https://huggingface.co/docs/diffusers/en/using-diffusers/schedulers
+        """
+        print(f"[SDNQ Sampler] Swapping scheduler to: {scheduler_name}")
+
+        try:
+            # Map scheduler name to class
+            scheduler_map = {
+                "FlowMatchEulerDiscreteScheduler": FlowMatchEulerDiscreteScheduler,
+            }
+
+            if scheduler_name not in scheduler_map:
+                raise ValueError(
+                    f"Unknown scheduler: {scheduler_name}\n"
+                    f"Available schedulers: {list(scheduler_map.keys())}"
+                )
+
+            scheduler_class = scheduler_map[scheduler_name]
+
+            # Swap scheduler using from_config pattern
+            # This preserves scheduler configuration while changing the algorithm
+            pipeline.scheduler = scheduler_class.from_config(pipeline.scheduler.config)
+
+            print(f"[SDNQ Sampler] ✓ Scheduler swapped successfully")
+
+        except Exception as e:
+            raise Exception(
+                f"Failed to swap scheduler\n\n"
+                f"Error: {str(e)}\n\n"
+                f"Requested scheduler: {scheduler_name}\n\n"
+                f"Troubleshooting:\n"
+                f"1. Ensure scheduler is compatible with the model\n"
+                f"2. FLUX models only support FlowMatchEulerDiscreteScheduler\n"
+                f"3. Check diffusers version (requires >=0.36.0)"
+            )
+
     def generate_image(self, pipeline: DiffusionPipeline, prompt: str, negative_prompt: str,
                       steps: int, cfg: float, width: int, height: int, seed: int) -> Image.Image:
         """
@@ -604,7 +664,8 @@ class SDNQSampler:
     def generate(self, model_selection: str, custom_model_path: str, prompt: str,
                 steps: int, cfg: float, width: int, height: int, seed: int,
                 dtype: str, memory_mode: str = "gpu", auto_download: bool = True,
-                negative_prompt: str = "", lora_path: str = "", lora_strength: float = 1.0) -> Tuple[torch.Tensor]:
+                negative_prompt: str = "", lora_path: str = "", lora_strength: float = 1.0,
+                scheduler: str = "FlowMatchEulerDiscreteScheduler") -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -624,7 +685,8 @@ class SDNQSampler:
             auto_download: Whether to auto-download models
             negative_prompt: Optional negative prompt
             lora_path: Optional LoRA file path or HuggingFace repo ID
-            lora_strength: LoRA influence strength (0.0 to 2.0)
+            lora_strength: LoRA influence strength (-5.0 to +5.0)
+            scheduler: Scheduler algorithm name ("FlowMatchEulerDiscreteScheduler")
 
         Returns:
             Tuple containing (IMAGE,) in ComfyUI format
@@ -660,9 +722,10 @@ class SDNQSampler:
                 self.current_model_path = model_path
                 self.current_dtype = dtype
                 self.current_memory_mode = memory_mode
-                # Clear LoRA cache when pipeline changes
+                # Clear LoRA and scheduler cache when pipeline changes
                 self.current_lora_path = None
                 self.current_lora_strength = None
+                self.current_scheduler = None
             else:
                 print(f"[SDNQ Sampler] Using cached pipeline")
 
@@ -693,6 +756,16 @@ class SDNQSampler:
                     self.unload_lora(self.pipeline)
                     self.current_lora_path = None
                     self.current_lora_strength = None
+
+            # Step 2.6: Handle scheduler swap
+            # Check if scheduler changed from cached value
+            if scheduler != self.current_scheduler:
+                print(f"[SDNQ Sampler] Scheduler changed - swapping to {scheduler}...")
+                self.swap_scheduler(self.pipeline, scheduler)
+                self.current_scheduler = scheduler
+            else:
+                if self.current_scheduler:
+                    print(f"[SDNQ Sampler] Using cached scheduler: {scheduler}")
 
             # Step 3: Generate image
             pil_image = self.generate_image(

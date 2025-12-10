@@ -104,7 +104,7 @@ After completing reality check and research, implementing standalone sampler nod
    - Added lora_path and lora_strength optional parameters
    - Supports both local .safetensors files and HuggingFace repo IDs
    - Automatic LoRA loading/unloading based on cache changes
-   - LoRA strength adjustment (0.0 to 2.0)
+   - LoRA strength adjustment (-5.0 to +5.0, per user request)
    - Integrated caching: prevents unnecessary reloads when using same LoRA
    - Clears LoRA cache when model changes
 
@@ -113,13 +113,36 @@ After completing reality check and research, implementing standalone sampler nod
    - Options: "gpu" (all on GPU, fastest), "balanced" (offloading, 12-16GB), "lowvram" (sequential, 8GB)
    - Proper GPU placement with .to("cuda") for "gpu" mode
 
+8. **Scheduler Support** (COMPLETE):
+   - Researched all available schedulers in diffusers 0.36.0 (December 2025)
+   - Added scheduler parameter with FlowMatchEulerDiscreteScheduler (only working scheduler for FLUX)
+   - Implemented swap_scheduler() method using from_config pattern
+   - Scheduler caching to avoid unnecessary swaps
+   - Future-proof: easy to add more schedulers when diffusers supports them
+   - See SCHEDULER_RESEARCH.md for detailed research findings
+   - QA validated with test_scheduler_implementation.py (5/5 tests passed)
+
+### Key Research Findings (Schedulers)
+
+**IMPORTANT**: As of December 2025, diffusers only has 2 flow-based schedulers:
+- FlowMatchEulerDiscreteScheduler ✅ Works with FLUX (only one that works)
+- FlowMatchHeunDiscreteScheduler ❌ Not updated for FLUX compatibility
+
+**All other schedulers** (DDIM, DPM++, Euler, etc.) are for traditional diffusion models and **do not work** with flow-based models like FLUX. They will produce incorrect images.
+
+**Sources**:
+- GitHub Issue #9924: "Can we get more schedulers for flow based models"
+- GitHub Issue #9607: "FlowMatch schedulers - closing the gap"
+- FluxPipeline source: scheduler type is FlowMatchEulerDiscreteScheduler
+- Scheduler compatibility research documented in SCHEDULER_RESEARCH.md
+
 ### Next Steps
 
 - User to test node in ComfyUI (all fixes applied)
-- Test LoRA support with real LoRA files
+- Test LoRA support with real LoRA files (-5.0 to +5.0 range)
+- Test scheduler parameter (currently only one option, but implemented correctly)
 - Test model selection and auto-download with real SDNQ model
 - Fix any errors discovered during testing
-- Consider scheduler exposure (limited for FLUX models)
 
 ---
 
