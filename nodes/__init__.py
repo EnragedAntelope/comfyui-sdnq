@@ -1,9 +1,9 @@
 """
 SDNQ Nodes Package
 
-Contains all ComfyUI node implementations for SDNQ model loading and quantization.
+Contains all ComfyUI node implementations for SDNQ model loading and sampling.
 """
 
-from .loader import SDNQModelLoader
+from .sampler import SDNQSampler
 
-__all__ = ['SDNQModelLoader']
+__all__ = ['SDNQSampler']
