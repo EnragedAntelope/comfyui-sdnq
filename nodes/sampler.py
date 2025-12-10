@@ -377,17 +377,25 @@ class SDNQSampler:
             # Generator handles random sampling during denoising
             generator = torch.Generator(device="cuda").manual_seed(seed)
 
+            # Build pipeline call kwargs
+            # Only include parameters that are supported by the specific pipeline
+            # Different pipelines have different signatures (FLUX.2 doesn't accept negative_prompt)
+            pipeline_kwargs = {
+                "prompt": prompt,
+                "num_inference_steps": steps,
+                "guidance_scale": cfg,
+                "width": width,
+                "height": height,
+                "generator": generator,
+            }
+
+            # Only add negative_prompt if it's not empty and pipeline supports it
+            if negative_prompt and negative_prompt.strip():
+                pipeline_kwargs["negative_prompt"] = negative_prompt
+
             # Call pipeline to generate image
             # Returns object with .images attribute containing list of PIL Images
-            result = pipeline(
-                prompt=prompt,
-                negative_prompt=negative_prompt if negative_prompt else None,
-                num_inference_steps=steps,
-                guidance_scale=cfg,
-                width=width,
-                height=height,
-                generator=generator,
-            )
+            result = pipeline(**pipeline_kwargs)
 
             # Check for interruption after generation
             if self.check_interrupted():
@@ -402,6 +410,22 @@ class SDNQSampler:
             return image
 
         except InterruptedError:
+            raise
+        except TypeError as e:
+            # Handle pipeline parameter incompatibilities
+            if "unexpected keyword argument" in str(e):
+                import re
+                match = re.search(r"unexpected keyword argument '(\w+)'", str(e))
+                param_name = match.group(1) if match else "unknown"
+                raise Exception(
+                    f"Pipeline doesn't support parameter: '{param_name}'\n\n"
+                    f"Error: {str(e)}\n\n"
+                    f"Pipeline type: {type(pipeline).__name__}\n"
+                    f"This pipeline has a different signature than expected.\n\n"
+                    f"Workaround:\n"
+                    f"- If error is about 'negative_prompt': Leave it empty (this pipeline doesn't support it)\n"
+                    f"- If error is about other params: Report this issue on GitHub with the pipeline type above"
+                )
             raise
         except Exception as e:
             raise Exception(
