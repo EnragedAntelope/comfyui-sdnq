@@ -8,21 +8,18 @@ Pre-quantized models: https://huggingface.co/collections/Disty0/sdnq
 This node pack enables loading SDNQ models with 50-75% VRAM savings while maintaining quality.
 """
 
-from .nodes.loader import SDNQModelLoader
-from .nodes.quantizer import SDNQModelQuantizer
+from .nodes.sampler import SDNQSampler
 
 # ============================================================================
 # V1 API - Node Registration (ComfyUI Standard)
 # ============================================================================
 
 NODE_CLASS_MAPPINGS = {
-    "SDNQModelLoader": SDNQModelLoader,
-    "SDNQModelQuantizer": SDNQModelQuantizer,
+    "SDNQSampler": SDNQSampler,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "SDNQModelLoader": "SDNQ Model Loader",
-    "SDNQModelQuantizer": "SDNQ Model Quantizer",
+    "SDNQSampler": "SDNQ Sampler",
 }
 
 # ============================================================================
