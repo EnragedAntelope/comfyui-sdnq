@@ -32,11 +32,13 @@ After completing reality check and research, implementing standalone sampler nod
    ✅ Custom model path support ([Custom Path] option)
    ✅ Comprehensive error handling with helpful troubleshooting messages
    ✅ Graceful interruption support (InterruptedError handling)
-   ✅ Widget tooltips (mouseover help for all 10 parameters)
+   ✅ Widget tooltips (mouseover help for all parameters)
    ✅ ComfyUI V3 API compliance with V1 backward compatibility
    ✅ Pipeline caching for performance (avoids reloading same model)
    ✅ Detailed logging for debugging ([SDNQ Sampler] prefixed messages)
    ✅ Proper error categorization (ValueError, FileNotFoundError, Exception)
+   ✅ LoRA support (local files and HuggingFace repos with strength control)
+   ✅ Memory management modes (gpu/balanced/lowvram)
 
 4. **Key Design Decisions**:
    - Using DiffusionPipeline.from_pretrained() (auto-detects model type)
@@ -98,12 +100,26 @@ After completing reality check and research, implementing standalone sampler nod
 - [DiffusionPipeline Loading Guide](https://huggingface.co/docs/diffusers/en/using-diffusers/loading)
 - Context.md lines 124-157 (previous session documented this)
 
+6. **LoRA Support** (COMPLETE):
+   - Added lora_path and lora_strength optional parameters
+   - Supports both local .safetensors files and HuggingFace repo IDs
+   - Automatic LoRA loading/unloading based on cache changes
+   - LoRA strength adjustment (0.0 to 2.0)
+   - Integrated caching: prevents unnecessary reloads when using same LoRA
+   - Clears LoRA cache when model changes
+
+7. **Memory Management** (UPDATED):
+   - Changed default memory_mode to "balanced" (per user request)
+   - Options: "gpu" (all on GPU, fastest), "balanced" (offloading, 12-16GB), "lowvram" (sequential, 8GB)
+   - Proper GPU placement with .to("cuda") for "gpu" mode
+
 ### Next Steps
 
-- User to test node in ComfyUI (import issue NOW FIXED)
+- User to test node in ComfyUI (all fixes applied)
+- Test LoRA support with real LoRA files
 - Test model selection and auto-download with real SDNQ model
 - Fix any errors discovered during testing
-- Add advanced features if needed (LoRA, batch generation, etc.)
+- Consider scheduler exposure (limited for FLUX models)
 
 ---
 

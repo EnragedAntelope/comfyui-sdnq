@@ -61,6 +61,8 @@ class SDNQSampler:
         self.current_model_path = None
         self.current_dtype = None
         self.current_memory_mode = None
+        self.current_lora_path = None
+        self.current_lora_strength = None
         self.interrupted = False
 
     @classmethod
@@ -145,7 +147,7 @@ class SDNQSampler:
 
                 # Memory management strategy
                 "memory_mode": (["gpu", "balanced", "lowvram"], {
-                    "default": "gpu",
+                    "default": "balanced",
                     "tooltip": "Memory management: 'gpu' = All on GPU (fastest, needs 24GB+ VRAM). 'balanced' = Model offloading (good for 12-16GB VRAM). 'lowvram' = Sequential offloading (slowest, works with 8GB VRAM)."
                 }),
 
@@ -160,6 +162,20 @@ class SDNQSampler:
                     "default": "",
                     "multiline": True,
                     "tooltip": "What to avoid in the image. Not all models support negative prompts (FLUX-schnell ignores them)."
+                }),
+
+                # LoRA support
+                "lora_path": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Path to LoRA file (.safetensors). Leave empty to not use LoRA. Supports local paths or HuggingFace repo IDs."
+                }),
+                "lora_strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.0,
+                    "max": 2.0,
+                    "step": 0.05,
+                    "tooltip": "LoRA influence strength. 1.0 = full strength, 0.5 = half strength, 0.0 = disabled. Higher values increase LoRA effect."
                 }),
             }
         }
@@ -367,6 +383,89 @@ class SDNQSampler:
                 f"5. Look at the error message above for specific details"
             )
 
+    def load_lora(self, pipeline: DiffusionPipeline, lora_path: str, lora_strength: float = 1.0):
+        """
+        Load LoRA weights into pipeline.
+
+        Supports both local .safetensors files and HuggingFace repo IDs.
+
+        Args:
+            pipeline: Loaded diffusers pipeline
+            lora_path: Path to LoRA file or HuggingFace repo ID
+            lora_strength: LoRA influence strength (0.0 to 2.0)
+
+        Based on verified API from:
+        https://huggingface.co/docs/diffusers/en/api/loaders/lora
+        https://huggingface.co/blog/lora-fast
+        """
+        import os
+
+        if not lora_path or lora_path.strip() == "":
+            print(f"[SDNQ Sampler] No LoRA specified, skipping...")
+            return
+
+        print(f"[SDNQ Sampler] Loading LoRA...")
+        print(f"[SDNQ Sampler]   Path: {lora_path}")
+        print(f"[SDNQ Sampler]   Strength: {lora_strength}")
+
+        try:
+            # Check if it's a local file or HuggingFace repo
+            is_local_file = os.path.exists(lora_path) and os.path.isfile(lora_path)
+
+            if is_local_file:
+                # Local .safetensors file
+                # Extract directory and filename
+                lora_dir = os.path.dirname(lora_path)
+                lora_file = os.path.basename(lora_path)
+
+                pipeline.load_lora_weights(
+                    lora_dir,
+                    weight_name=lora_file,
+                    adapter_name="lora"
+                )
+            else:
+                # Assume it's a HuggingFace repo ID
+                pipeline.load_lora_weights(
+                    lora_path,
+                    adapter_name="lora"
+                )
+
+            # Set LoRA strength
+            if lora_strength != 1.0:
+                pipeline.set_adapters(["lora"], adapter_weights=[lora_strength])
+            else:
+                pipeline.set_adapters(["lora"])
+
+            print(f"[SDNQ Sampler] ✓ LoRA loaded successfully")
+
+        except Exception as e:
+            raise Exception(
+                f"Failed to load LoRA\n\n"
+                f"Error: {str(e)}\n\n"
+                f"LoRA path: {lora_path}\n\n"
+                f"Troubleshooting:\n"
+                f"1. Verify LoRA file exists (.safetensors format)\n"
+                f"2. For HuggingFace repos, verify repo ID is correct\n"
+                f"3. Ensure LoRA is compatible with the model architecture\n"
+                f"4. Check if LoRA is for the correct model type (FLUX, SDXL, etc.)\n"
+                f"5. Try with lora_strength=1.0 first"
+            )
+
+    def unload_lora(self, pipeline: DiffusionPipeline):
+        """
+        Unload LoRA weights from pipeline.
+
+        Args:
+            pipeline: Pipeline with loaded LoRA
+        """
+        try:
+            if hasattr(pipeline, 'unload_lora_weights'):
+                print(f"[SDNQ Sampler] Unloading previous LoRA...")
+                pipeline.unload_lora_weights()
+        except Exception as e:
+            # Non-critical error, just log it
+            print(f"[SDNQ Sampler] Warning: Failed to unload LoRA: {e}")
+
     def generate_image(self, pipeline: DiffusionPipeline, prompt: str, negative_prompt: str,
                       steps: int, cfg: float, width: int, height: int, seed: int) -> Image.Image:
         """
@@ -505,7 +604,7 @@ class SDNQSampler:
     def generate(self, model_selection: str, custom_model_path: str, prompt: str,
                 steps: int, cfg: float, width: int, height: int, seed: int,
                 dtype: str, memory_mode: str = "gpu", auto_download: bool = True,
-                negative_prompt: str = "") -> Tuple[torch.Tensor]:
+                negative_prompt: str = "", lora_path: str = "", lora_strength: float = 1.0) -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -521,8 +620,11 @@ class SDNQSampler:
             height: Image height
             seed: Random seed
             dtype: Data type string
+            memory_mode: Memory management mode ("gpu", "balanced", "lowvram")
             auto_download: Whether to auto-download models
             negative_prompt: Optional negative prompt
+            lora_path: Optional LoRA file path or HuggingFace repo ID
+            lora_strength: LoRA influence strength (0.0 to 2.0)
 
         Returns:
             Tuple containing (IMAGE,) in ComfyUI format
@@ -558,8 +660,39 @@ class SDNQSampler:
                 self.current_model_path = model_path
                 self.current_dtype = dtype
                 self.current_memory_mode = memory_mode
+                # Clear LoRA cache when pipeline changes
+                self.current_lora_path = None
+                self.current_lora_strength = None
             else:
                 print(f"[SDNQ Sampler] Using cached pipeline")
+
+            # Step 2.5: Handle LoRA loading/unloading
+            # Check if LoRA configuration has changed
+            lora_changed = (lora_path != self.current_lora_path or
+                           lora_strength != self.current_lora_strength)
+
+            if lora_path and lora_path.strip():
+                # User wants to use LoRA
+                if lora_changed:
+                    print(f"[SDNQ Sampler] LoRA configuration changed - updating...")
+
+                    # Unload previous LoRA if it exists
+                    if self.current_lora_path:
+                        self.unload_lora(self.pipeline)
+
+                    # Load new LoRA
+                    self.load_lora(self.pipeline, lora_path, lora_strength)
+                    self.current_lora_path = lora_path
+                    self.current_lora_strength = lora_strength
+                else:
+                    print(f"[SDNQ Sampler] Using cached LoRA: {lora_path}")
+            else:
+                # User doesn't want LoRA, but we have one loaded
+                if self.current_lora_path:
+                    print(f"[SDNQ Sampler] Unloading LoRA...")
+                    self.unload_lora(self.pipeline)
+                    self.current_lora_path = None
+                    self.current_lora_strength = None
 
             # Step 3: Generate image
             pil_image = self.generate_image(
