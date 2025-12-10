@@ -20,23 +20,38 @@ After completing reality check and research, implementing standalone sampler nod
    - Created RESEARCH_NOTES.md with verified API documentation
    - Archived broken wrapper code to archive/ directory
 
-2. **Implementation**:
-   - Created nodes/sampler.py - Standalone SDNQ sampler node
-   - Updated __init__.py to load new sampler
+2. **Implementation** (COMPLETE):
+   - Created nodes/sampler.py - Standalone SDNQ sampler node (585 lines, fully featured)
+   - Fixed nodes/__init__.py import error (was importing old loader)
+   - Updated main __init__.py to load new sampler
    - All code based on verified APIs (NO assumptions)
 
-3. **Key Design Decisions**:
+3. **Features Implemented**:
+   ✅ Model catalog dropdown (21 pre-configured SDNQ models from Disty0)
+   ✅ HuggingFace auto-download with progress tracking and resume support
+   ✅ Custom model path support ([Custom Path] option)
+   ✅ Comprehensive error handling with helpful troubleshooting messages
+   ✅ Graceful interruption support (InterruptedError handling)
+   ✅ Widget tooltips (mouseover help for all 10 parameters)
+   ✅ ComfyUI V3 API compliance with V1 backward compatibility
+   ✅ Pipeline caching for performance (avoids reloading same model)
+   ✅ Detailed logging for debugging ([SDNQ Sampler] prefixed messages)
+   ✅ Proper error categorization (ValueError, FileNotFoundError, Exception)
+
+4. **Key Design Decisions**:
    - Using DiffusionPipeline.from_pretrained() (auto-detects model type)
    - Using enable_model_cpu_offload() for memory efficiency
    - Pipeline caching to avoid reloading same model
    - Proper PIL to ComfyUI IMAGE tensor conversion (NHWC, float32, 0-1 range)
+   - Integrated with existing core/ modules (registry.py, downloader.py, config.py)
    - Verified all APIs from official docs before implementation
 
 ### Next Steps
 
-- Test with real SDNQ model (manual download)
+- User to test node in ComfyUI (should now be searchable/visible)
+- Test model selection and auto-download with real SDNQ model
 - Fix any errors discovered during testing
-- Once working, add advanced features (model catalog, HF downloads, etc.)
+- Add advanced features if needed (LoRA, batch generation, etc.)
 
 ---
 
