@@ -209,6 +209,34 @@ After completing reality check and research, implementing standalone sampler nod
 - [ComfyUI Folder Structure](https://comfyui-wiki.com/en/interface/files)
 - All research documented in UX_IMPROVEMENTS_RESEARCH.md
 
+10. **CRITICAL BUG FIX** (Post-UX Improvements):
+   - **Issue**: FLUX.2 crashed when negative_prompt was provided (TypeError)
+   - **Root Cause**: Default negative prompt added in UX improvements, but FLUX.2 doesn't support negative_prompt parameter
+   - **Previous Behavior**: Hard crash with error message telling user to clear negative_prompt
+   - **New Behavior**: Gracefully detects unsupported parameter, removes it, retries generation, logs warning to console
+   - **Fix Location**: nodes/sampler.py:684-709 (try/except with retry logic)
+   - **Impact**: With default negative prompt, FLUX.2 would crash on EVERY generation unless manually cleared
+   - **User Experience**: Now seamless - FLUX.2 works out of the box despite having default negative prompt
+   - **Console Output**: `⚠️  Pipeline Flux2Pipeline doesn't support negative_prompt - skipping it`
+   - QA validated with test_negative_prompt_fix.py (7/7 checks passed)
+
+### Graceful Parameter Handling
+
+The node now implements intelligent parameter compatibility checking:
+
+1. **First Attempt**: Try generation with all parameters (including negative_prompt if provided)
+2. **Error Detection**: If TypeError about 'negative_prompt' occurs
+3. **Automatic Retry**: Remove negative_prompt from kwargs and retry
+4. **User Notification**: Log warning to console (non-intrusive)
+5. **Success**: Generation continues successfully
+
+This prevents crashes for:
+- FLUX.2 (doesn't support negative_prompt)
+- FLUX-schnell (cfg=0, ignores negative_prompt but accepts it)
+- Future models with different parameter signatures
+
+**Other unsupported parameters** still raise helpful errors with troubleshooting tips.
+
 ### Next Steps
 
 - User to test node in ComfyUI (all fixes applied)

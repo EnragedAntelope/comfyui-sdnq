@@ -674,13 +674,39 @@ class SDNQSampler:
                 "generator": generator,
             }
 
-            # Only add negative_prompt if it's not empty and pipeline supports it
+            # Only add negative_prompt if it's not empty
+            # Will be automatically removed if pipeline doesn't support it
             if negative_prompt and negative_prompt.strip():
                 pipeline_kwargs["negative_prompt"] = negative_prompt
 
-            # Call pipeline to generate image
-            # Returns object with .images attribute containing list of PIL Images
-            result = pipeline(**pipeline_kwargs)
+            # Try calling pipeline with all parameters
+            # If negative_prompt is unsupported, retry without it
+            try:
+                result = pipeline(**pipeline_kwargs)
+            except TypeError as e:
+                # Check if error is about negative_prompt parameter
+                if "negative_prompt" in str(e) and "unexpected keyword argument" in str(e):
+                    # Pipeline doesn't support negative_prompt (e.g., FLUX.2, FLUX-schnell)
+                    print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support negative_prompt - skipping it")
+
+                    # Remove negative_prompt and retry
+                    if "negative_prompt" in pipeline_kwargs:
+                        del pipeline_kwargs["negative_prompt"]
+
+                    # Retry generation without negative_prompt
+                    result = pipeline(**pipeline_kwargs)
+                else:
+                    # Different TypeError - re-raise with helpful message
+                    import re
+                    match = re.search(r"unexpected keyword argument '(\w+)'", str(e))
+                    param_name = match.group(1) if match else "unknown"
+                    raise Exception(
+                        f"Pipeline doesn't support parameter: '{param_name}'\n\n"
+                        f"Error: {str(e)}\n\n"
+                        f"Pipeline type: {type(pipeline).__name__}\n"
+                        f"This pipeline has a different signature than expected.\n\n"
+                        f"Please report this issue on GitHub with the pipeline type above."
+                    )
 
             # Check for interruption after generation
             if self.check_interrupted():
@@ -696,23 +722,12 @@ class SDNQSampler:
 
         except InterruptedError:
             raise
-        except TypeError as e:
-            # Handle pipeline parameter incompatibilities
-            if "unexpected keyword argument" in str(e):
-                import re
-                match = re.search(r"unexpected keyword argument '(\w+)'", str(e))
-                param_name = match.group(1) if match else "unknown"
-                raise Exception(
-                    f"Pipeline doesn't support parameter: '{param_name}'\n\n"
-                    f"Error: {str(e)}\n\n"
-                    f"Pipeline type: {type(pipeline).__name__}\n"
-                    f"This pipeline has a different signature than expected.\n\n"
-                    f"Workaround:\n"
-                    f"- If error is about 'negative_prompt': Leave it empty (this pipeline doesn't support it)\n"
-                    f"- If error is about other params: Report this issue on GitHub with the pipeline type above"
-                )
-            raise
         except Exception as e:
+            # Don't double-wrap exceptions we already formatted
+            if "Pipeline doesn't support parameter" in str(e):
+                raise
+
+            # Other errors - provide troubleshooting
             raise Exception(
                 f"Failed to generate image\n\n"
                 f"Error: {str(e)}\n\n"
