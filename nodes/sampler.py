@@ -60,6 +60,7 @@ class SDNQSampler:
         self.pipeline = None
         self.current_model_path = None
         self.current_dtype = None
+        self.current_memory_mode = None
         self.interrupted = False
 
     @classmethod
@@ -140,6 +141,12 @@ class SDNQSampler:
                 "dtype": (["bfloat16", "float16", "float32"], {
                     "default": "bfloat16",
                     "tooltip": "Model precision. bfloat16 recommended for FLUX (best quality/speed). float16 for older GPUs. float32 for CPU."
+                }),
+
+                # Memory management strategy
+                "memory_mode": (["gpu", "balanced", "lowvram"], {
+                    "default": "gpu",
+                    "tooltip": "Memory management: 'gpu' = All on GPU (fastest, needs 24GB+ VRAM). 'balanced' = Model offloading (good for 12-16GB VRAM). 'lowvram' = Sequential offloading (slowest, works with 8GB VRAM)."
                 }),
 
                 # Auto-download control
@@ -272,7 +279,7 @@ class SDNQSampler:
                 f"5. If download was interrupted, try again - it will resume"
             )
 
-    def load_pipeline(self, model_path: str, dtype_str: str) -> DiffusionPipeline:
+    def load_pipeline(self, model_path: str, dtype_str: str, memory_mode: str = "gpu") -> DiffusionPipeline:
         """
         Load SDNQ model using diffusers pipeline.
 
@@ -286,6 +293,7 @@ class SDNQSampler:
         Args:
             model_path: Local path to SDNQ model directory
             dtype_str: String dtype ("bfloat16", "float16", "float32")
+            memory_mode: Memory management strategy ("gpu", "balanced", "lowvram")
 
         Returns:
             Loaded diffusers pipeline
@@ -295,6 +303,7 @@ class SDNQSampler:
 
         Based on verified API from:
         https://huggingface.co/docs/diffusers/en/using-diffusers/loading
+        https://huggingface.co/docs/diffusers/main/optimization/memory
         """
         # Convert dtype string to torch dtype
         dtype_map = {
@@ -306,20 +315,40 @@ class SDNQSampler:
 
         print(f"[SDNQ Sampler] Loading model from: {model_path}")
         print(f"[SDNQ Sampler] Using dtype: {dtype_str} ({torch_dtype})")
+        print(f"[SDNQ Sampler] Memory mode: {memory_mode}")
 
         try:
             # Load pipeline - DiffusionPipeline auto-detects model type
             # SDNQ quantization is automatically detected from model config
+            # Note: Pipeline loads to CPU by default - we move to GPU below
             pipeline = DiffusionPipeline.from_pretrained(
                 model_path,
                 torch_dtype=torch_dtype,
                 local_files_only=True,  # Only load from local path
             )
 
-            # Enable CPU offload for memory efficiency
-            # This automatically manages device placement (model components on GPU when needed)
-            # Verified from FLUX examples: https://huggingface.co/docs/diffusers/main/api/pipelines/flux
-            pipeline.enable_model_cpu_offload()
+            # Apply memory management strategy
+            # Based on: https://huggingface.co/docs/diffusers/main/optimization/memory
+            if memory_mode == "gpu":
+                # Full GPU mode: Fastest performance, needs 24GB+ VRAM
+                # Load entire pipeline to GPU
+                print(f"[SDNQ Sampler] Moving model to GPU (full GPU mode)...")
+                pipeline.to("cuda")
+                print(f"[SDNQ Sampler] ✓ Model loaded to GPU (all components on VRAM)")
+
+            elif memory_mode == "balanced":
+                # Model CPU offload: Good balance for 12-16GB VRAM
+                # Moves whole models between CPU and GPU as needed
+                print(f"[SDNQ Sampler] Enabling model CPU offload (balanced mode)...")
+                pipeline.enable_model_cpu_offload()
+                print(f"[SDNQ Sampler] ✓ Model offloading enabled (efficient VRAM usage)")
+
+            elif memory_mode == "lowvram":
+                # Sequential CPU offload: Maximum memory savings for 8GB VRAM
+                # Slowest but works on limited VRAM
+                print(f"[SDNQ Sampler] Enabling sequential CPU offload (low VRAM mode)...")
+                pipeline.enable_sequential_cpu_offload()
+                print(f"[SDNQ Sampler] ✓ Sequential offloading enabled (minimal VRAM usage)")
 
             print(f"[SDNQ Sampler] Model loaded successfully!")
             print(f"[SDNQ Sampler] Pipeline type: {type(pipeline).__name__}")
@@ -475,7 +504,8 @@ class SDNQSampler:
 
     def generate(self, model_selection: str, custom_model_path: str, prompt: str,
                 steps: int, cfg: float, width: int, height: int, seed: int,
-                dtype: str, auto_download: bool = True, negative_prompt: str = "") -> Tuple[torch.Tensor]:
+                dtype: str, memory_mode: str = "gpu", auto_download: bool = True,
+                negative_prompt: str = "") -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -520,12 +550,14 @@ class SDNQSampler:
             # Check if we need to reload the pipeline
             if (self.pipeline is None or
                 self.current_model_path != model_path or
-                self.current_dtype != dtype):
+                self.current_dtype != dtype or
+                self.current_memory_mode != memory_mode):
 
                 print(f"[SDNQ Sampler] Pipeline cache miss - loading model...")
-                self.pipeline = self.load_pipeline(model_path, dtype)
+                self.pipeline = self.load_pipeline(model_path, dtype, memory_mode)
                 self.current_model_path = model_path
                 self.current_dtype = dtype
+                self.current_memory_mode = memory_mode
             else:
                 print(f"[SDNQ Sampler] Using cached pipeline")
 

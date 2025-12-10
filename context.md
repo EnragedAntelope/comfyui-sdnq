@@ -50,10 +50,12 @@ After completing reality check and research, implementing standalone sampler nod
    - Fixed core/__init__.py still importing wrapper.py (moved to archive)
    - Added structure validation test
    - Tested import chain properly before final commit
+   - Fixed FLUX.2 negative_prompt parameter error
+   - **CRITICAL**: Fixed CPU processing - was forcing CPU instead of GPU
 
 ### Lessons Learned - Quality Assurance
 
-**CRITICAL LESSON**: Always validate the full import chain before claiming code is ready!
+**CRITICAL LESSON #1**: Always validate the full import chain before claiming code is ready!
 
 **What went wrong**:
 - Moved wrapper.py to archive/ but forgot to update core/__init__.py
@@ -67,6 +69,34 @@ After completing reality check and research, implementing standalone sampler nod
 - ✅ Never claim "ready" without running validation tests
 
 **Note**: Can't test full imports in this environment (no torch/diffusers), but structure tests pass.
+
+---
+
+**CRITICAL LESSON #2**: Always check device placement - don't blindly follow old patterns!
+
+**What went wrong** (Commit e0c1550):
+- Used `enable_model_cpu_offload()` by default, forcing CPU processing
+- Didn't verify device placement behavior for current versions
+- Failed to learn from context.md (lines 124-157 documented this EXACT issue before)
+- Failed to check archive code that worked correctly
+
+**The facts** (December 2025, verified):
+- `DiffusionPipeline.from_pretrained()` loads to **CPU by default** (HuggingFace docs)
+- Must explicitly call `.to("cuda")` for GPU processing
+- `enable_model_cpu_offload()` is for **low VRAM systems** (12-16GB), not modern GPUs
+- User has torch 2.9.x + CUDA 12.8 - should use full GPU mode
+
+**How to prevent**:
+- ✅ Read context.md FIRST - lessons are documented there
+- ✅ Check archive code to see what worked before
+- ✅ Research current best practices (don't assume from old docs)
+- ✅ Verify device placement in console logs
+- ✅ Added memory_mode parameter: "gpu" (default), "balanced", "lowvram"
+
+**Sources verified**:
+- [HuggingFace Diffusers Memory Optimization](https://huggingface.co/docs/diffusers/en/optimization/memory)
+- [DiffusionPipeline Loading Guide](https://huggingface.co/docs/diffusers/en/using-diffusers/loading)
+- Context.md lines 124-157 (previous session documented this)
 
 ### Next Steps
 
