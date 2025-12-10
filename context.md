@@ -113,28 +113,101 @@ After completing reality check and research, implementing standalone sampler nod
    - Options: "gpu" (all on GPU, fastest), "balanced" (offloading, 12-16GB), "lowvram" (sequential, 8GB)
    - Proper GPU placement with .to("cuda") for "gpu" mode
 
-8. **Scheduler Support** (COMPLETE):
+8. **Scheduler Support** (ENHANCED):
    - Researched all available schedulers in diffusers 0.36.0 (December 2025)
-   - Added scheduler parameter with FlowMatchEulerDiscreteScheduler (only working scheduler for FLUX)
-   - Implemented swap_scheduler() method using from_config pattern
+   - **EXPANDED**: Now supports 14 schedulers (1 flow-match + 13 traditional)
+   - Flow-based: FlowMatchEulerDiscreteScheduler (for FLUX/SD3/Qwen/Z-Image)
+   - Traditional: DPMSolver, UniPC, Euler, EulerAncestral, DDIM, Heun, KDPM2, DEIS, LMS, DDPM, PNDM
+   - Implemented swap_scheduler() method with all scheduler mappings
    - Scheduler caching to avoid unnecessary swaps
-   - Future-proof: easy to add more schedulers when diffusers supports them
-   - See SCHEDULER_RESEARCH.md for detailed research findings
-   - QA validated with test_scheduler_implementation.py (5/5 tests passed)
+   - See UX_IMPROVEMENTS_RESEARCH.md for comprehensive scheduler research
 
-### Key Research Findings (Schedulers)
+9. **Major UX Improvements** (COMPLETE):
+   - **LoRA Dropdown**: Integrated with ComfyUI's folder_paths to show available LoRAs
+   - **Default Negative Prompt**: "blurry, low quality, distorted, deformed, ugly, bad anatomy, bad hands, text, watermark, signature"
+   - **Logical Parameter Ordering**: 5 clear groups (Model Selection → Prompts → Settings → Configuration → Enhancements)
+   - **Multi-Model Scheduler Support**: Both flow-based and traditional diffusion schedulers
+   - QA validated with test_ux_improvements.py (7/7 tests passed)
 
-**IMPORTANT**: As of December 2025, diffusers only has 2 flow-based schedulers:
-- FlowMatchEulerDiscreteScheduler ✅ Works with FLUX (only one that works)
-- FlowMatchHeunDiscreteScheduler ❌ Not updated for FLUX compatibility
+### LoRA Integration Details
 
-**All other schedulers** (DDIM, DPM++, Euler, etc.) are for traditional diffusion models and **do not work** with flow-based models like FLUX. They will produce incorrect images.
+**Dropdown Options**:
+- `[None]`: No LoRA (default)
+- `[Custom Path]`: Use lora_custom_path for manual path or HuggingFace repo
+- Available LoRAs: Automatically populated from `ComfyUI/models/loras/`
+
+**Path Resolution**:
+- Uses `folder_paths.get_filename_list("loras")` to discover available LoRAs
+- Uses `folder_paths.get_folder_paths("loras")` to build full paths
+- Supports subdirectories within loras folder
+- Falls back gracefully if folder_paths not available
+
+**Parameters**:
+- `lora_selection`: Dropdown with available LoRAs
+- `lora_custom_path`: Custom path (only used when [Custom Path] selected)
+- `lora_strength`: -5.0 to +5.0 (negative values invert effect)
+
+### Scheduler Compatibility Matrix
+
+| Model Type | Compatible Schedulers | Default |
+|------------|----------------------|---------|
+| FLUX/SD3/Qwen/Z-Image | FlowMatchEulerDiscreteScheduler | FlowMatch... |
+| SDXL/SD1.5 | DPMSolver, UniPC, Euler, EulerAncestral, DDIM, etc. | DPMSolverMultistep |
+
+**CRITICAL**: Wrong scheduler type produces broken/corrupted images!
+- Tooltip warns users about compatibility
+- Default changed to DPMSolverMultistepScheduler (works with SDXL, most common in catalog)
+
+### Parameter Organization
+
+**GROUP 1: MODEL SELECTION**
+1. model_selection
+2. custom_model_path
+
+**GROUP 2: GENERATION PROMPTS**
+3. prompt
+4. negative_prompt (now required with default value)
+
+**GROUP 3: GENERATION SETTINGS**
+5. steps
+6. cfg
+7. width
+8. height
+9. seed
+10. scheduler (moved to settings, now visible to all users)
+
+**GROUP 4: MODEL CONFIGURATION**
+11. dtype
+12. memory_mode
+13. auto_download
+
+**GROUP 5: ENHANCEMENTS** (Optional)
+14. lora_selection
+15. lora_custom_path
+16. lora_strength
+
+### Key Research Findings (Full Scheduler List)
+
+**Flow-Based Models** (FLUX, SD3, Qwen, Z-Image):
+- ✅ FlowMatchEulerDiscreteScheduler (ONLY one that works)
+- ❌ All traditional schedulers produce incorrect images
+
+**Traditional Diffusion Models** (SDXL, SD1.5):
+- ✅ DPMSolverMultistepScheduler (recommended, best speed/quality)
+- ✅ UniPCMultistepScheduler (very fast, high quality)
+- ✅ EulerDiscreteScheduler (simple, reliable)
+- ✅ EulerAncestralDiscreteScheduler (creative results)
+- ✅ DDIMScheduler (classic, deterministic)
+- ✅ HeunDiscreteScheduler, KDPM2DiscreteScheduler, etc. (10+ more options)
+- ❌ Flow-match schedulers don't work with traditional models
 
 **Sources**:
-- GitHub Issue #9924: "Can we get more schedulers for flow based models"
-- GitHub Issue #9607: "FlowMatch schedulers - closing the gap"
-- FluxPipeline source: scheduler type is FlowMatchEulerDiscreteScheduler
-- Scheduler compatibility research documented in SCHEDULER_RESEARCH.md
+- [SDXL Scheduler Testing](https://github.com/tillo13/sample_schedulers)
+- [Stable Diffusion Samplers Guide](https://stable-diffusion-art.com/samplers/)
+- [ML Guide to Schedulers](https://blog.segmind.com/what-are-schedulers-in-stable-diffusion/)
+- [ComfyUI folder_paths.py](https://github.com/comfyanonymous/ComfyUI/blob/master/folder_paths.py)
+- [ComfyUI Folder Structure](https://comfyui-wiki.com/en/interface/files)
+- All research documented in UX_IMPROVEMENTS_RESEARCH.md
 
 ### Next Steps
 
