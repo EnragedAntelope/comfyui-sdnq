@@ -14,7 +14,7 @@ This custom node pack enables running [SDNQ (SD.Next Quantization)](https://gith
 - **📦 Model Catalog**: 30+ pre-configured SDNQ models with auto-download
 - **💾 Smart Caching**: Download once, use forever
 - **🚀 VRAM Savings**: 50-75% memory reduction with quantization
-- **⚡ Performance Optimizations**: Optional torch.compile, xFormers, VAE tiling
+- **⚡ Performance Optimizations**: Optional xFormers, VAE tiling, SDPA (automatic)
 - **🎯 LoRA Support**: Load LoRAs from ComfyUI loras folder
 - **📅 Multi-Scheduler**: 14 schedulers (FLUX/SD3 flow-match + traditional diffusion)
 - **🔧 Memory Modes**: GPU (fastest), balanced (12-16GB VRAM), lowvram (8GB VRAM)
@@ -76,9 +76,9 @@ Restart ComfyUI after installation.
 - `dtype`: bfloat16 (recommended), float16, or float32
 
 **Performance Optimizations** (optional):
-- `use_torch_compile`: 1.8-3.3x speedup (⚠️ requires memory_mode='gpu')
 - `use_xformers`: 10-45% speedup (safe to try, auto-fallback to SDPA)
 - `enable_vae_tiling`: For large images >1536px (prevents OOM)
+- SDPA (Scaled Dot Product Attention): Always active - automatic PyTorch 2.0+ optimization
 
 **LoRA Support**:
 - `lora_selection`: Dropdown from ComfyUI loras folder
@@ -103,15 +103,10 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 
 ## Performance Tips
 
-**For Balanced Mode (12-16GB VRAM)**:
-- Use `use_xformers=True` for 10-45% speedup
-- SDPA (scaled dot product attention) is always active for automatic optimization
-- torch.compile requires full GPU mode
-
-**For Full GPU Mode (24GB+ VRAM)**:
-- Enable `use_torch_compile=True` for 1.8-3.3x speedup
-- First run adds ~60s compilation, then all subsequent runs are much faster
-- Combine with `use_xformers=True` for maximum performance
+**For All Memory Modes**:
+- SDPA (Scaled Dot Product Attention) is always active - automatic PyTorch 2.0+ optimization
+- Enable `use_xformers=True` for 10-45% additional speedup (safe to try)
+- Use `enable_vae_tiling=True` for large images (>1536px) to prevent OOM
 
 **Scheduler Selection**:
 - FLUX/SD3/Qwen/Z-Image: Use `FlowMatchEulerDiscreteScheduler`
@@ -143,10 +138,9 @@ If you see "xFormers not available" but have it installed:
 
 **Balanced/lowvram modes**: Inherently slower due to CPU↔GPU data movement. Options:
 - Enable `use_xformers=True` (10-45% speedup if compatible)
-- Upgrade to more VRAM to use full GPU mode
+- SDPA is always active for automatic optimization
+- Upgrade to more VRAM for full GPU mode
 - Use smaller model (uint4 vs int8)
-
-**Full GPU mode**: Enable `use_torch_compile=True` for 1.8-3.3x speedup
 
 ### Out of Memory
 

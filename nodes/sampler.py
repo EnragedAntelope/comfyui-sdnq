@@ -95,7 +95,6 @@ class SDNQSampler:
         self.current_lora_path = None
         self.current_lora_strength = None
         # Performance optimization settings cache
-        self.current_use_torch_compile = None
         self.current_use_xformers = None
         self.current_enable_vae_tiling = None
         self.interrupted = False
@@ -276,19 +275,14 @@ class SDNQSampler:
                 # PERFORMANCE OPTIMIZATIONS (Optional speedups)
                 # ============================================================
 
-                "use_torch_compile": ("BOOLEAN", {
-                    "default": False,
-                    "tooltip": "Enable torch.compile for 1.8-3.3x speedup (RTX 4090: 32s→10s). ⚠️ CRITICAL: Only works with memory_mode='gpu' (full GPU mode). Incompatible with 'balanced' or 'lowvram' modes. First run adds ~60s compilation (one-time). Requires PyTorch 2.0+. NOTE: SDPA is already enabled by default for automatic optimization."
-                }),
-
                 "use_xformers": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Enable xFormers memory-efficient attention for 10-45% speedup. Works with all memory modes (gpu/balanced/lowvram). Auto-fallback to SDPA if xformers not installed or incompatible. Safe to enable - try it if you have 'pip install xformers'."
+                    "tooltip": "Enable xFormers memory-efficient attention for 10-45% speedup. Works with all memory modes (gpu/balanced/lowvram). Auto-fallback to SDPA if xformers not installed or incompatible. Requires: pip install xformers"
                 }),
 
                 "enable_vae_tiling": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "Enable VAE tiling for very large images (>1536px). Prevents out-of-memory errors on high resolutions. Minimal performance impact. Auto-recommended for images >1536x1536."
+                    "tooltip": "Enable VAE tiling for very large images (>1536px). Prevents out-of-memory errors on high resolutions. Minimal performance impact. Recommended for images >1536x1536."
                 }),
             }
         }
@@ -409,8 +403,7 @@ class SDNQSampler:
             )
 
     def load_pipeline(self, model_path: str, dtype_str: str, memory_mode: str = "gpu",
-                     use_torch_compile: bool = False, use_xformers: bool = False,
-                     enable_vae_tiling: bool = False) -> DiffusionPipeline:
+                     use_xformers: bool = False, enable_vae_tiling: bool = False) -> DiffusionPipeline:
         """
         Load SDNQ model using diffusers pipeline.
 
@@ -425,7 +418,6 @@ class SDNQSampler:
             model_path: Local path to SDNQ model directory
             dtype_str: String dtype ("bfloat16", "float16", "float32")
             memory_mode: Memory management strategy ("gpu", "balanced", "lowvram")
-            use_torch_compile: Enable torch.compile for 1.8-3.3x speedup
             use_xformers: Enable xFormers memory-efficient attention
             enable_vae_tiling: Enable VAE tiling for large images
 
@@ -466,7 +458,6 @@ class SDNQSampler:
 
             # CRITICAL: Apply xFormers BEFORE memory management
             # xFormers must be enabled before CPU offloading is set up
-            # Order matters: xFormers -> Memory Management -> torch.compile
             if use_xformers:
                 try:
                     print(f"[SDNQ Sampler] Enabling xFormers memory-efficient attention...")
@@ -501,36 +492,6 @@ class SDNQSampler:
                 print(f"[SDNQ Sampler] Enabling sequential CPU offload (low VRAM mode)...")
                 pipeline.enable_sequential_cpu_offload()
                 print(f"[SDNQ Sampler] ✓ Sequential offloading enabled (minimal VRAM usage)")
-
-            # Apply remaining performance optimizations (torch.compile, VAE tiling)
-            # torch.compile must be AFTER memory management is set up
-            if use_torch_compile:
-                # Check memory mode compatibility
-                if memory_mode != "gpu":
-                    print(f"[SDNQ Sampler] ⚠️  torch.compile is incompatible with memory_mode='{memory_mode}'")
-                    print(f"[SDNQ Sampler] ⚠️  torch.compile requires memory_mode='gpu' (full GPU mode)")
-                    print(f"[SDNQ Sampler] ⚠️  Skipping torch.compile to prevent crash. Change memory_mode to 'gpu' to enable.")
-                    print(f"[SDNQ Sampler] ℹ️  Reason: torch.compile cannot trace through CPU offloading hooks")
-                else:
-                    try:
-                        print("[SDNQ Sampler] Compiling model (first run only, ~60s)...")
-                        # Set memory format for optimal performance
-                        pipeline.transformer.to(memory_format=torch.channels_last)
-                        # Compile transformer (main bottleneck)
-                        pipeline.transformer = torch.compile(
-                            pipeline.transformer,
-                            mode="max-autotune",
-                            fullgraph=True
-                        )
-                        # Compile VAE decoder
-                        pipeline.vae.decode = torch.compile(
-                            pipeline.vae.decode,
-                            mode="max-autotune",
-                            fullgraph=True
-                        )
-                        print("[SDNQ Sampler] ✓ torch.compile enabled (warmup on first generation)")
-                    except Exception as e:
-                        print(f"[SDNQ Sampler] ⚠️  torch.compile failed, continuing without: {e}")
 
             # VAE tiling (works with all memory modes)
             if enable_vae_tiling:
@@ -858,8 +819,7 @@ class SDNQSampler:
                 negative_prompt: str, steps: int, cfg: float, width: int, height: int,
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
-                use_torch_compile: bool = False, use_xformers: bool = False,
-                enable_vae_tiling: bool = False) -> Tuple[torch.Tensor]:
+                use_xformers: bool = False, enable_vae_tiling: bool = False) -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -882,7 +842,6 @@ class SDNQSampler:
             lora_selection: Selected LoRA from dropdown ([None], [Custom Path], or filename)
             lora_custom_path: Custom LoRA path (used when [Custom Path] selected)
             lora_strength: LoRA influence strength (-5.0 to +5.0)
-            use_torch_compile: Enable torch.compile for 1.8-3.3x speedup (first-run overhead)
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images
 
@@ -912,26 +871,23 @@ class SDNQSampler:
             # Check if we need to reload the pipeline
             # Cache is invalidated if any of these change:
             # - Model path, dtype, memory mode
-            # - Performance optimization settings (torch.compile, xformers, vae_tiling)
+            # - Performance optimization settings (xformers, vae_tiling)
             if (self.pipeline is None or
                 self.current_model_path != model_path or
                 self.current_dtype != dtype or
                 self.current_memory_mode != memory_mode or
-                self.current_use_torch_compile != use_torch_compile or
                 self.current_use_xformers != use_xformers or
                 self.current_enable_vae_tiling != enable_vae_tiling):
 
                 print(f"[SDNQ Sampler] Pipeline cache miss - loading model...")
                 self.pipeline = self.load_pipeline(
                     model_path, dtype, memory_mode,
-                    use_torch_compile=use_torch_compile,
                     use_xformers=use_xformers,
                     enable_vae_tiling=enable_vae_tiling
                 )
                 self.current_model_path = model_path
                 self.current_dtype = dtype
                 self.current_memory_mode = memory_mode
-                self.current_use_torch_compile = use_torch_compile
                 self.current_use_xformers = use_xformers
                 self.current_enable_vae_tiling = enable_vae_tiling
                 # Clear LoRA and scheduler cache when pipeline changes
