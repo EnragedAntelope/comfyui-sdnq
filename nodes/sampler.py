@@ -18,6 +18,7 @@ from PIL import Image
 import traceback
 import sys
 import os
+import warnings
 from typing import Optional, Tuple, Dict, Any
 
 # ComfyUI imports for LoRA folder access
@@ -447,11 +448,20 @@ class SDNQSampler:
             # Load pipeline - DiffusionPipeline auto-detects model type
             # SDNQ quantization is automatically detected from model config
             # Note: Pipeline loads to CPU by default - we move to GPU below
-            pipeline = DiffusionPipeline.from_pretrained(
-                model_path,
-                torch_dtype=torch_dtype,
-                local_files_only=True,  # Only load from local path
-            )
+
+            # Suppress torch_dtype deprecation warning from transformers components
+            # The warning comes from transformers library (used for CLIP/T5 text encoders)
+            # diffusers still uses torch_dtype as the official parameter in 0.36.x
+            # See: https://github.com/huggingface/peft/issues/2835
+            with warnings.catch_warnings():
+                # Filter both message pattern and FutureWarning category for comprehensive suppression
+                warnings.filterwarnings("ignore", message=".*torch_dtype.*", category=FutureWarning)
+                warnings.filterwarnings("ignore", message=".*torch_dtype.*")
+                pipeline = DiffusionPipeline.from_pretrained(
+                    model_path,
+                    torch_dtype=torch_dtype,
+                    local_files_only=True,  # Only load from local path
+                )
 
             print(f"[SDNQ Sampler] Model loaded successfully!")
             print(f"[SDNQ Sampler] Pipeline type: {type(pipeline).__name__}")
@@ -463,10 +473,42 @@ class SDNQSampler:
                     print(f"[SDNQ Sampler] Enabling xFormers memory-efficient attention...")
                     pipeline.enable_xformers_memory_efficient_attention()
                     print("[SDNQ Sampler] ✓ xFormers memory-efficient attention enabled")
+
+                except ModuleNotFoundError as e:
+                    # xFormers package not installed
+                    print(f"[SDNQ Sampler] ⚠️  xFormers not installed: {e}")
+                    print("[SDNQ Sampler] Install with: pip install xformers")
+                    print("[SDNQ Sampler] Falling back to SDPA (PyTorch 2.0+ default attention)")
+
+                except ValueError as e:
+                    # CUDA not available - xFormers requires GPU
+                    print(f"[SDNQ Sampler] ⚠️  xFormers requires CUDA: {e}")
+                    print("[SDNQ Sampler] Falling back to SDPA")
+
+                except NotImplementedError as e:
+                    # Model architecture doesn't support xFormers
+                    print(f"[SDNQ Sampler] ℹ️  xFormers not supported for this model architecture")
+                    print(f"[SDNQ Sampler] Details: {e}")
+                    print("[SDNQ Sampler] Using SDPA instead (this is normal for some models)")
+
+                except (RuntimeError, AttributeError) as e:
+                    # Version incompatibility, dimension mismatch, or API changes
+                    print(f"[SDNQ Sampler] ⚠️  xFormers compatibility issue: {type(e).__name__}")
+                    print(f"[SDNQ Sampler] Error: {e}")
+                    print("[SDNQ Sampler] This may indicate:")
+                    print("[SDNQ Sampler]   - xFormers version mismatch with PyTorch/CUDA")
+                    print("[SDNQ Sampler]   - GPU architecture incompatibility")
+                    print("[SDNQ Sampler]   - Tensor dimension issues with this model")
+                    print("[SDNQ Sampler] Try: pip install -U xformers --force-reinstall")
+                    print("[SDNQ Sampler] Falling back to SDPA")
+
                 except Exception as e:
-                    # xFormers not available or incompatible - fall back to SDPA
-                    print(f"[SDNQ Sampler] ℹ️  xFormers not available, using SDPA (default PyTorch 2.0+ optimization)")
-                    # Note: Common reasons: not installed, incompatible GPU, or dtype mismatch
+                    # Unexpected error - log full details for debugging
+                    print(f"[SDNQ Sampler] ⚠️  Unexpected xFormers error: {type(e).__name__}")
+                    print(f"[SDNQ Sampler] Error message: {e}")
+                    print("[SDNQ Sampler] Full traceback:")
+                    traceback.print_exc()
+                    print("[SDNQ Sampler] Falling back to SDPA")
             else:
                 print("[SDNQ Sampler] Using SDPA (scaled dot product attention, default in PyTorch 2.0+)")
 
