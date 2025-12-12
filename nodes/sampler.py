@@ -288,8 +288,8 @@ class SDNQSampler:
         }
 
     # V3 API: Return type hints
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_TYPES = ("IMAGE", "LATENT")
+    RETURN_NAMES = ("image", "latent")
 
     # V1 API: Function name
     FUNCTION = "generate"
@@ -666,7 +666,7 @@ class SDNQSampler:
             )
 
     def generate_image(self, pipeline: DiffusionPipeline, prompt: str, negative_prompt: str,
-                      steps: int, cfg: float, width: int, height: int, seed: int) -> Image.Image:
+                      steps: int, cfg: float, width: int, height: int, seed: int) -> Tuple[Image.Image, torch.Tensor]:
         """
         Generate image using the loaded pipeline.
 
@@ -681,13 +681,14 @@ class SDNQSampler:
             seed: Random seed for reproducibility
 
         Returns:
-            PIL Image object
+            Tuple of (PIL Image object, latent tensor)
 
         Raises:
             Exception: If generation fails or is interrupted
 
         Based on verified API from FLUX examples:
         https://huggingface.co/docs/diffusers/main/api/pipelines/flux
+        https://huggingface.co/docs/diffusers/main/api/pipelines/overview#diffusers.DiffusionPipeline.__call__.output_type
         """
         print(f"[SDNQ Sampler] Generating image...")
         print(f"[SDNQ Sampler]   Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
@@ -707,6 +708,7 @@ class SDNQSampler:
             # Build pipeline call kwargs
             # Only include parameters that are supported by the specific pipeline
             # Different pipelines have different signatures (FLUX.2 doesn't accept negative_prompt)
+            # Request latent output so we can return both latent and decoded image
             pipeline_kwargs = {
                 "prompt": prompt,
                 "num_inference_steps": steps,
@@ -714,6 +716,7 @@ class SDNQSampler:
                 "width": width,
                 "height": height,
                 "generator": generator,
+                "output_type": "latent",  # Get latents before VAE decode
             }
 
             # Only add negative_prompt if it's not empty
@@ -754,13 +757,43 @@ class SDNQSampler:
             if self.check_interrupted():
                 raise InterruptedError("Generation interrupted by user")
 
-            # Extract first image from results
-            # result.images[0] is a PIL.Image.Image object
-            image = result.images[0]
+            # Extract latent tensor from results
+            # When output_type="latent", result.images contains latent tensors
+            latents = result.images[0]
 
-            print(f"[SDNQ Sampler] Image generated! Size: {image.size}")
+            print(f"[SDNQ Sampler] Latents generated! Shape: {latents.shape}")
 
-            return image
+            # Manually decode latents to PIL Image
+            # VAE expects latents scaled by vae.config.scaling_factor
+            # Based on: https://huggingface.co/docs/diffusers/main/api/models/autoencoderkl
+            print(f"[SDNQ Sampler] Decoding latents to image...")
+
+            # Get VAE scaling factor
+            vae_scale_factor = pipeline.vae.config.scaling_factor
+
+            # Decode latents - need to add batch dimension if not present
+            if latents.dim() == 3:
+                latents_batch = latents.unsqueeze(0)
+            else:
+                latents_batch = latents
+
+            # Decode using VAE
+            with torch.no_grad():
+                decoded = pipeline.vae.decode(latents_batch / vae_scale_factor).sample
+
+            # Convert decoded tensor to PIL Image
+            # decoded is [B, C, H, W] in range [-1, 1]
+            # Need to convert to [H, W, C] in range [0, 255]
+            decoded = (decoded / 2 + 0.5).clamp(0, 1)  # [-1, 1] -> [0, 1]
+            decoded = decoded.cpu().permute(0, 2, 3, 1).float().numpy()  # [B, C, H, W] -> [B, H, W, C]
+            decoded = (decoded[0] * 255).round().astype("uint8")  # [0, 1] -> [0, 255]
+
+            # Create PIL Image
+            image = Image.fromarray(decoded)
+
+            print(f"[SDNQ Sampler] Image decoded! Size: {image.size}")
+
+            return image, latents
 
         except InterruptedError:
             raise
@@ -811,9 +844,38 @@ class SDNQSampler:
         # [H, W, C] -> [1, H, W, C]
         tensor = torch.from_numpy(numpy_image)[None, :]
 
-        print(f"[SDNQ Sampler] Converted to ComfyUI tensor: shape={tensor.shape}, dtype={tensor.dtype}")
+        print(f"[SDNQ Sampler] Converted to ComfyUI IMAGE tensor: shape={tensor.shape}, dtype={tensor.dtype}")
 
         return tensor
+
+    def latents_to_comfy_format(self, latents: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Convert diffusers latent tensor to ComfyUI LATENT format.
+
+        ComfyUI LATENT format:
+        - Dictionary: {"samples": torch.Tensor}
+        - Shape: [B, C, H/8, W/8] (batch, channels, height/8, width/8)
+        - Dtype: torch.float32
+        - Device: CPU (ComfyUI moves to GPU as needed)
+
+        Args:
+            latents: Latent tensor from diffusers pipeline
+
+        Returns:
+            Dictionary in ComfyUI LATENT format
+
+        Based on ComfyUI's VAEEncode node output format.
+        """
+        # Ensure latents have batch dimension
+        if latents.dim() == 3:
+            latents = latents.unsqueeze(0)
+
+        # Move to CPU and ensure float32
+        latents = latents.cpu().float()
+
+        print(f"[SDNQ Sampler] Converted to ComfyUI LATENT format: shape={latents.shape}, dtype={latents.dtype}")
+
+        return {"samples": latents}
 
     def generate(self, model_selection: str, custom_model_path: str, prompt: str,
                 negative_prompt: str, steps: int, cfg: float, width: int, height: int,
@@ -846,7 +908,9 @@ class SDNQSampler:
             enable_vae_tiling: Enable VAE tiling for large images
 
         Returns:
-            Tuple containing (IMAGE,) in ComfyUI format
+            Tuple containing (IMAGE, LATENT) in ComfyUI format
+            - IMAGE: torch.Tensor [1, H, W, 3] float32, range [0, 1]
+            - LATENT: dict {"samples": torch.Tensor [1, C, H/8, W/8]} float32
 
         Raises:
             ValueError: For invalid inputs
@@ -961,8 +1025,8 @@ class SDNQSampler:
                 if self.current_scheduler:
                     print(f"[SDNQ Sampler] Using cached scheduler: {scheduler}")
 
-            # Step 3: Generate image
-            pil_image = self.generate_image(
+            # Step 3: Generate image and latents
+            pil_image, latents = self.generate_image(
                 self.pipeline,
                 prompt,
                 negative_prompt,
@@ -973,15 +1037,17 @@ class SDNQSampler:
                 seed
             )
 
-            # Step 4: Convert to ComfyUI format
-            comfy_tensor = self.pil_to_comfy_tensor(pil_image)
+            # Step 4: Convert to ComfyUI formats
+            comfy_image = self.pil_to_comfy_tensor(pil_image)
+            comfy_latent = self.latents_to_comfy_format(latents)
 
             print(f"\n{'='*60}")
             print(f"[SDNQ Sampler] Generation complete!")
             print(f"{'='*60}\n")
 
             # Return as tuple (ComfyUI expects tuple of outputs)
-            return (comfy_tensor,)
+            # Both IMAGE and LATENT outputs available for user to choose
+            return (comfy_image, comfy_latent)
 
         except InterruptedError as e:
             print(f"\n{'='*60}")

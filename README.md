@@ -85,7 +85,9 @@ Restart ComfyUI after installation.
 - `lora_custom_path`: Custom LoRA path or HuggingFace repo
 - `lora_strength`: -5.0 to +5.0 (1.0 = full strength)
 
-**Outputs**: `IMAGE` (connects to SaveImage, Preview, etc.)
+**Outputs**:
+- `IMAGE` - Decoded image ready for display/save (connects to SaveImage, Preview, etc.)
+- `LATENT` - Raw latent representation before VAE decode (connects to VAE nodes, upscalers, etc.)
 
 ---
 
@@ -98,6 +100,35 @@ Restart ComfyUI after installation.
 - **Others**: Z-Image-Turbo, Chroma1-HD, HunyuanImage3, Video models
 
 Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https://huggingface.co/collections/Disty0/sdnq
+
+---
+
+## Working with Outputs
+
+The SDNQ Sampler provides **dual outputs** for maximum flexibility:
+
+### IMAGE Output
+- **Format**: Decoded RGB image tensor [1, H, W, 3]
+- **Use Case**: Direct preview, saving, or display
+- **Connects To**: SaveImage, PreviewImage, Image nodes
+- **Processing**: Latents → VAE Decode → PIL Image → ComfyUI Tensor
+
+### LATENT Output
+- **Format**: Raw latent tensor [1, C, H/8, W/8] in ComfyUI LATENT format
+- **Use Case**: Advanced workflows needing latent manipulation
+- **Connects To**: VAE Decode, Latent Upscale, Latent Composite, ControlNet
+- **Processing**: Raw latents from diffusion process (before VAE decode)
+
+**Why Both?**
+- Some workflows need the decoded image (most common)
+- Advanced users may want to process latents before decoding (upscaling, compositing, etc.)
+- Both outputs are generated simultaneously with no performance penalty
+
+**Example Use Cases**:
+- **IMAGE**: Standard workflow - generate and save
+- **LATENT**: Upscale latents 2x, then decode for higher quality
+- **LATENT**: Composite multiple latents before final decode
+- **LATENT**: Feed into ControlNet or other latent-space processors
 
 ---
 
