@@ -100,10 +100,14 @@ class SDNQModelQuantizer:
             ) from e
 
         # Validate inputs
-        if not output_name or output_name.strip() == "":
+        if not output_name or not output_name.strip():
             raise ValueError("output_name cannot be empty")
 
-        output_name = output_name.strip()
+        # CRITICAL: Sanitize the output name to prevent path traversal.
+        # os.path.basename strips all directory information, leaving only the filename.
+        sanitized_name = os.path.basename(output_name.strip())
+        if not sanitized_name or sanitized_name in (".", ".."):
+            raise ValueError("Invalid output_name. Please use a valid filename.")
 
         # Determine output directory (ComfyUI models folder)
         try:
@@ -123,7 +127,7 @@ class SDNQModelQuantizer:
         sdnq_dir = base_dir / "sdnq"
         sdnq_dir.mkdir(parents=True, exist_ok=True)
 
-        output_path = sdnq_dir / output_name
+        output_path = sdnq_dir / sanitized_name
 
         # Check if output already exists
         if output_path.exists():
