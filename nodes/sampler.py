@@ -106,7 +106,7 @@ class SDNQSampler:
         # Performance optimization settings cache
         self.current_use_xformers = None
         self.current_enable_vae_tiling = None
-        self.current_matmul_precision = None
+        self.current_use_quantized_matmul = None
         self.interrupted = False
 
     @classmethod
@@ -285,9 +285,9 @@ class SDNQSampler:
                 # PERFORMANCE OPTIMIZATIONS (Optional speedups)
                 # ============================================================
 
-                "matmul_precision": (["int8", "fp8", "none"], {
-                    "default": "int8",
-                    "tooltip": "Precision for Triton quantized matmul. 'int8' is standard, 'fp8' for newer GPUs (Ada/Hopper), 'none' to disable optimization. Requires Linux/WSL."
+                "use_quantized_matmul": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "Enable Triton quantized matmul for ~20% speedup. Precision (int8/fp8) is automatically determined by the model and hardware. Requires Linux/WSL with Triton support."
                 }),
 
                 "use_xformers": ("BOOLEAN", {
@@ -419,7 +419,7 @@ class SDNQSampler:
 
     def load_pipeline(self, model_path: str, dtype_str: str, memory_mode: str = "gpu",
                      use_xformers: bool = False, enable_vae_tiling: bool = False,
-                     matmul_precision: str = "int8") -> DiffusionPipeline:
+                     use_quantized_matmul: bool = True) -> DiffusionPipeline:
         """
         Load SDNQ model using diffusers pipeline.
 
@@ -436,7 +436,7 @@ class SDNQSampler:
             memory_mode: Memory management strategy ("gpu", "balanced", "lowvram")
             use_xformers: Enable xFormers memory-efficient attention
             enable_vae_tiling: Enable VAE tiling for large images
-            matmul_precision: Precision for Triton quantized matmul ("int8", "fp8", "none")
+            use_quantized_matmul: Enable Triton quantized matmul optimization
 
         Returns:
             Loaded diffusers pipeline
@@ -484,17 +484,15 @@ class SDNQSampler:
 
             # Apply SDNQ optimizations (Quantized MatMul)
             # This must be done BEFORE memory management moves things around
-            use_quantized_matmul = matmul_precision != "none"
             if use_quantized_matmul:
                 if triton_is_available and torch.cuda.is_available():
-                    print(f"[SDNQ Sampler] Applying Triton Quantized MatMul optimizations (precision: {matmul_precision})...")
+                    print(f"[SDNQ Sampler] Applying Triton Quantized MatMul optimizations...")
                     try:
                         # Apply to transformer (FLUX, SD3)
                         if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
                             pipeline.transformer = apply_sdnq_options_to_model(
                                 pipeline.transformer,
-                                use_quantized_matmul=True,
-                                matmul_precision=matmul_precision
+                                use_quantized_matmul=True
                             )
                             print("[SDNQ Sampler] ✓ Optimization applied to transformer")
 
@@ -502,8 +500,7 @@ class SDNQSampler:
                         if hasattr(pipeline, 'unet') and pipeline.unet is not None:
                             pipeline.unet = apply_sdnq_options_to_model(
                                 pipeline.unet,
-                                use_quantized_matmul=True,
-                                matmul_precision=matmul_precision
+                                use_quantized_matmul=True
                             )
                             print("[SDNQ Sampler] ✓ Optimization applied to UNet")
 
@@ -513,16 +510,14 @@ class SDNQSampler:
                             # Safe to try, sdnq loader checks internally
                             pipeline.text_encoder = apply_sdnq_options_to_model(
                                 pipeline.text_encoder,
-                                use_quantized_matmul=True,
-                                matmul_precision=matmul_precision
+                                use_quantized_matmul=True
                             )
                             print("[SDNQ Sampler] ✓ Optimization applied to text_encoder")
 
                         if hasattr(pipeline, 'text_encoder_2') and pipeline.text_encoder_2 is not None:
                             pipeline.text_encoder_2 = apply_sdnq_options_to_model(
                                 pipeline.text_encoder_2,
-                                use_quantized_matmul=True,
-                                matmul_precision=matmul_precision
+                                use_quantized_matmul=True
                             )
                             print("[SDNQ Sampler] ✓ Optimization applied to text_encoder_2")
 
@@ -535,7 +530,7 @@ class SDNQSampler:
                     elif not triton_is_available:
                         print("[SDNQ Sampler] ℹ️  Triton not available/supported (requires Linux/WSL). Quantized MatMul disabled.")
             else:
-                 print("[SDNQ Sampler] Quantized MatMul optimization disabled.")
+                print("[SDNQ Sampler] Quantized MatMul optimization disabled.")
 
             # CRITICAL: Apply xFormers BEFORE memory management
             # xFormers must be enabled before CPU offloading is set up
@@ -933,7 +928,7 @@ class SDNQSampler:
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
-                matmul_precision: str = "int8") -> Tuple[torch.Tensor]:
+                use_quantized_matmul: bool = True) -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -958,7 +953,7 @@ class SDNQSampler:
             lora_strength: LoRA influence strength (-5.0 to +5.0)
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images
-            matmul_precision: Precision for Triton quantized matmul ("int8", "fp8", "none")
+            use_quantized_matmul: Enable Triton quantized matmul optimization
 
         Returns:
             Tuple containing (IMAGE,) in ComfyUI format
@@ -986,28 +981,28 @@ class SDNQSampler:
             # Check if we need to reload the pipeline
             # Cache is invalidated if any of these change:
             # - Model path, dtype, memory mode
-            # - Performance optimization settings (xformers, vae_tiling, matmul_precision)
+            # - Performance optimization settings (xformers, vae_tiling, quantized_matmul)
             if (self.pipeline is None or
                 self.current_model_path != model_path or
                 self.current_dtype != dtype or
                 self.current_memory_mode != memory_mode or
                 self.current_use_xformers != use_xformers or
                 self.current_enable_vae_tiling != enable_vae_tiling or
-                self.current_matmul_precision != matmul_precision):
+                self.current_use_quantized_matmul != use_quantized_matmul):
 
                 print(f"[SDNQ Sampler] Pipeline cache miss - loading model...")
                 self.pipeline = self.load_pipeline(
                     model_path, dtype, memory_mode,
                     use_xformers=use_xformers,
                     enable_vae_tiling=enable_vae_tiling,
-                    matmul_precision=matmul_precision
+                    use_quantized_matmul=use_quantized_matmul
                 )
                 self.current_model_path = model_path
                 self.current_dtype = dtype
                 self.current_memory_mode = memory_mode
                 self.current_use_xformers = use_xformers
                 self.current_enable_vae_tiling = enable_vae_tiling
-                self.current_matmul_precision = matmul_precision
+                self.current_use_quantized_matmul = use_quantized_matmul
                 # Clear LoRA and scheduler cache when pipeline changes
                 self.current_lora_path = None
                 self.current_lora_strength = None
