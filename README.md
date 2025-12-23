@@ -43,13 +43,13 @@ Restart ComfyUI after installation.
 
 ### Updating Diffusers (for latest models)
 
-Some newer SDNQ models (like FLUX.2, Z-Image-Turbo) require the latest version of diffusers. If you encounter errors loading new models, upgrade diffusers:
+Some newer SDNQ models (like FLUX.2, Z-Image-Turbo, Qwen-Image-Edit-2511) require the latest diffusers. If you encounter errors loading new models:
 
 ```bash
 # Standard upgrade (recommended)
 pip install --upgrade diffusers
 
-# For bleeding-edge models (if standard upgrade doesn't work)
+# If diffusers doesn't yet support the model you're trying
 pip install --upgrade git+https://github.com/huggingface/diffusers.git
 ```
 

@@ -89,26 +89,33 @@ SDNQ_MODEL_CATALOG = {
         "description": "Qwen-Image-Edit-2509 4-bit SVD - Image-to-Image",
         "priority": 10
     },
+    "Qwen-Image-Edit-2511-SDNQ-uint4": {
+        "repo_id": "Disty0/Qwen-Image-Edit-2511-SDNQ-uint4-svd-r32",
+        "type": "Qwen",
+        "quant_level": "uint4",
+        "description": "Qwen-Image-Edit-2511 4-bit SVD - Latest Image-to-Image",
+        "priority": 11
+    },
     "Qwen-Image-Edit-Lightning-SDNQ-uint4": {
         "repo_id": "Disty0/Qwen-Image-Edit-Lightning-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
         "description": "Qwen-Image-Edit-Lightning 4-bit SVD - Fast I2I",
-        "priority": 11
+        "priority": 12
     },
     "Qwen-Image-Edit-SDNQ-uint4": {
         "repo_id": "Disty0/Qwen-Image-Edit-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
         "description": "Qwen-Image-Edit 4-bit SVD - Image-to-Image",
-        "priority": 12
+        "priority": 13
     },
     "Qwen3-VL-32B-Instruct-SDNQ-uint4": {
         "repo_id": "Disty0/Qwen3-VL-32B-Instruct-SDNQ-uint4-svd-r32",
         "type": "Qwen",
         "quant_level": "uint4",
         "description": "Qwen3-VL-32B 4-bit SVD - Image-to-Text (18B params)",
-        "priority": 13
+        "priority": 14
     },
 
     # Z-Image Models - Latest addition (2025)
@@ -117,14 +124,14 @@ SDNQ_MODEL_CATALOG = {
         "type": "Z-Image",
         "quant_level": "int8",
         "description": "Z-Image-Turbo 8-bit - Best quality, fast INT8 MatMul",
-        "priority": 14
+        "priority": 15
     },
     "Z-Image-Turbo-SDNQ-uint4": {
         "repo_id": "Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32",
         "type": "Z-Image",
         "quant_level": "uint4",
         "description": "Z-Image-Turbo 4-bit SVD - Max VRAM savings",
-        "priority": 15
+        "priority": 16
     },
 
     # Other Models
@@ -133,21 +140,21 @@ SDNQ_MODEL_CATALOG = {
         "type": "Chroma",
         "quant_level": "uint4",
         "description": "Chroma1-HD 4-bit SVD - Text-to-Image",
-        "priority": 16
+        "priority": 17
     },
     "ChronoEdit-14B-SDNQ-uint4": {
         "repo_id": "Disty0/ChronoEdit-14B-SDNQ-uint4-svd-r32",
         "type": "Chrono",
         "quant_level": "uint4",
         "description": "ChronoEdit-14B 4-bit SVD - Image editing",
-        "priority": 17
+        "priority": 18
     },
     "HunyuanImage3-SDNQ-uint4": {
         "repo_id": "Disty0/HunyuanImage3-SDNQ-uint4-svd-r32",
         "type": "Hunyuan",
         "quant_level": "uint4",
         "description": "HunyuanImage3 4-bit SVD - Text-to-Image (45B params)",
-        "priority": 18
+        "priority": 19
     },
 
     # NoobAI Models - Anime/Illustration focused
@@ -156,14 +163,14 @@ SDNQ_MODEL_CATALOG = {
         "type": "SDXL",
         "quant_level": "uint4",
         "description": "NoobAI-XL v1.0 4-bit SVD - Anime/illustration",
-        "priority": 19
+        "priority": 20
     },
     "NoobAI-XL-v1.1-SDNQ-uint4": {
         "repo_id": "Disty0/NoobAI-XL-v1.1-SDNQ-uint4-svd-r128",
         "type": "SDXL",
         "quant_level": "uint4",
         "description": "NoobAI-XL v1.1 4-bit SVD - Anime/illustration",
-        "priority": 20
+        "priority": 21
     },
 
     # Video Models - Image-to-Video and Text-to-Video
@@ -172,14 +179,14 @@ SDNQ_MODEL_CATALOG = {
         "type": "Wan",
         "quant_level": "uint4",
         "description": "Wan2.2-I2V-A14B 4-bit SVD - Image-to-Video",
-        "priority": 21
+        "priority": 22
     },
     "Wan2.2-T2V-A14B-SDNQ-uint4": {
         "repo_id": "Disty0/Wan2.2-T2V-A14B-SDNQ-uint4-svd-r32",
         "type": "Wan",
         "quant_level": "uint4",
         "description": "Wan2.2-T2V-A14B 4-bit SVD - Text-to-Video",
-        "priority": 22
+        "priority": 23
     },
 }
 

@@ -42,7 +42,7 @@ def comfy_entrypoint():
     return {
         "node_class_mappings": NODE_CLASS_MAPPINGS,
         "node_display_name_mappings": NODE_DISPLAY_NAME_MAPPINGS,
-        "version": "0.3.0",
+        "version": "1.1.0",
         "author": "ComfyUI-SDNQ Contributors",
         "description": "SDNQ quantized model support for ComfyUI",
         "license": "Apache-2.0",
