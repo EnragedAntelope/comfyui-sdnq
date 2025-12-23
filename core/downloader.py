@@ -3,14 +3,37 @@ HuggingFace Hub Downloader
 
 Handles downloading SDNQ models from HuggingFace Hub with progress tracking,
 caching, and resume support.
+
+Performance Note: huggingface_hub imports are lazy-loaded via module-level
+functions to avoid slowing down ComfyUI startup. Imports happen on first use.
 """
 
 import os
 import time
 from typing import Optional, Callable, Dict
 from pathlib import Path
-from huggingface_hub import snapshot_download, hf_hub_download, try_to_load_from_cache, model_info
 from .config import get_sdnq_models_dir
+
+# ============================================================================
+# LAZY IMPORT HELPERS
+# ============================================================================
+# huggingface_hub is only imported when actually needed for downloading
+# ============================================================================
+
+_hf_hub_funcs = None
+
+def _get_hf_hub_funcs():
+    """Lazy load huggingface_hub functions."""
+    global _hf_hub_funcs
+    if _hf_hub_funcs is None:
+        from huggingface_hub import snapshot_download, hf_hub_download, try_to_load_from_cache, model_info
+        _hf_hub_funcs = {
+            'snapshot_download': snapshot_download,
+            'hf_hub_download': hf_hub_download,
+            'try_to_load_from_cache': try_to_load_from_cache,
+            'model_info': model_info,
+        }
+    return _hf_hub_funcs
 
 # Disable symlink warnings on Windows (where symlinks require admin privileges)
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
@@ -87,7 +110,8 @@ def download_model(
 
     print("Fetching model info...")
     try:
-        info = model_info(repo_id)
+        hf_funcs = _get_hf_hub_funcs()
+        info = hf_funcs['model_info'](repo_id)
         # Estimate size from siblings
         total_size = sum(getattr(sibling, 'size', 0) or 0 for sibling in info.siblings)
         size_gb = total_size / (1024**3)
@@ -107,7 +131,8 @@ def download_model(
         # Download entire model using snapshot_download
         # Use local_dir to store in ComfyUI models folder (not HF cache)
         # Disable symlinks to avoid Windows admin privilege issues
-        local_path = snapshot_download(
+        hf_funcs = _get_hf_hub_funcs()
+        local_path = hf_funcs['snapshot_download'](
             repo_id=repo_id,
             local_dir=model_dir,
             local_dir_use_symlinks=False,  # Fixes Windows "WinError 1314" symlink privilege issue
@@ -184,7 +209,8 @@ def get_cached_model_path(repo_id: str, cache_dir: Optional[str] = None) -> Opti
 
     # Fallback: check old HF cache location for backwards compatibility
     try:
-        cached_path = try_to_load_from_cache(
+        hf_funcs = _get_hf_hub_funcs()
+        cached_path = hf_funcs['try_to_load_from_cache'](
             repo_id=repo_id,
             filename="model_index.json"
         )
@@ -207,7 +233,8 @@ def get_model_size_estimate(repo_id: str) -> Optional[Dict[str, any]]:
         Dictionary with size info or None if unavailable
     """
     try:
-        info = model_info(repo_id)
+        hf_funcs = _get_hf_hub_funcs()
+        info = hf_funcs['model_info'](repo_id)
         total_size = sum(getattr(sibling, 'size', 0) or 0 for sibling in info.siblings)
 
         return {

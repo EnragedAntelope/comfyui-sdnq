@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Catalog of pre-quantized SDNQ models from Disty0's HuggingFace collection
 # All entries verified against https://huggingface.co/collections/Disty0/sdnq
-# Last updated: 2025-11-27
+# Last updated: 2025-12-23
 SDNQ_MODEL_CATALOG = {
     # FLUX.1 Models - Original FLUX with older qint naming
     "FLUX.1-dev-qint8": {
@@ -112,12 +112,19 @@ SDNQ_MODEL_CATALOG = {
     },
 
     # Z-Image Models - Latest addition (2025)
+    "Z-Image-Turbo-SDNQ-int8": {
+        "repo_id": "Disty0/Z-Image-Turbo-SDNQ-int8",
+        "type": "Z-Image",
+        "quant_level": "int8",
+        "description": "Z-Image-Turbo 8-bit - Best quality, fast INT8 MatMul",
+        "priority": 14
+    },
     "Z-Image-Turbo-SDNQ-uint4": {
         "repo_id": "Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32",
         "type": "Z-Image",
         "quant_level": "uint4",
-        "description": "Z-Image-Turbo 4-bit SVD - Fast T2I",
-        "priority": 14
+        "description": "Z-Image-Turbo 4-bit SVD - Max VRAM savings",
+        "priority": 15
     },
 
     # Other Models
@@ -126,21 +133,21 @@ SDNQ_MODEL_CATALOG = {
         "type": "Chroma",
         "quant_level": "uint4",
         "description": "Chroma1-HD 4-bit SVD - Text-to-Image",
-        "priority": 15
+        "priority": 16
     },
     "ChronoEdit-14B-SDNQ-uint4": {
         "repo_id": "Disty0/ChronoEdit-14B-SDNQ-uint4-svd-r32",
         "type": "Chrono",
         "quant_level": "uint4",
         "description": "ChronoEdit-14B 4-bit SVD - Image editing",
-        "priority": 16
+        "priority": 17
     },
     "HunyuanImage3-SDNQ-uint4": {
         "repo_id": "Disty0/HunyuanImage3-SDNQ-uint4-svd-r32",
         "type": "Hunyuan",
         "quant_level": "uint4",
         "description": "HunyuanImage3 4-bit SVD - Text-to-Image (45B params)",
-        "priority": 17
+        "priority": 18
     },
 
     # NoobAI Models - Anime/Illustration focused
@@ -149,14 +156,14 @@ SDNQ_MODEL_CATALOG = {
         "type": "SDXL",
         "quant_level": "uint4",
         "description": "NoobAI-XL v1.0 4-bit SVD - Anime/illustration",
-        "priority": 18
+        "priority": 19
     },
     "NoobAI-XL-v1.1-SDNQ-uint4": {
         "repo_id": "Disty0/NoobAI-XL-v1.1-SDNQ-uint4-svd-r128",
         "type": "SDXL",
         "quant_level": "uint4",
         "description": "NoobAI-XL v1.1 4-bit SVD - Anime/illustration",
-        "priority": 19
+        "priority": 20
     },
 
     # Video Models - Image-to-Video and Text-to-Video
@@ -165,14 +172,14 @@ SDNQ_MODEL_CATALOG = {
         "type": "Wan",
         "quant_level": "uint4",
         "description": "Wan2.2-I2V-A14B 4-bit SVD - Image-to-Video",
-        "priority": 20
+        "priority": 21
     },
     "Wan2.2-T2V-A14B-SDNQ-uint4": {
         "repo_id": "Disty0/Wan2.2-T2V-A14B-SDNQ-uint4-svd-r32",
         "type": "Wan",
         "quant_level": "uint4",
         "description": "Wan2.2-T2V-A14B 4-bit SVD - Text-to-Video",
-        "priority": 21
+        "priority": 22
     },
 }
 

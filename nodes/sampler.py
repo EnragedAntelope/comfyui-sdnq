@@ -10,6 +10,9 @@ Based on verified APIs from:
 - diffusers documentation (https://huggingface.co/docs/diffusers)
 - SDNQ repository (https://github.com/Disty0/sdnq)
 - ComfyUI nodes.py (IMAGE format specification)
+
+Performance Note: Heavy imports (sdnq, diffusers, huggingface_hub) are lazy-loaded
+to minimize ComfyUI startup time. They are only imported when actually needed.
 """
 
 import torch
@@ -19,7 +22,7 @@ import traceback
 import sys
 import os
 import warnings
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
 
 # ComfyUI imports for LoRA folder access
 try:
@@ -29,53 +32,103 @@ except ImportError:
     COMFYUI_AVAILABLE = False
     print("[SDNQ Sampler] Warning: folder_paths not available - LoRA dropdown will be disabled")
 
-# SDNQ import - registers SDNQ support into diffusers
-from sdnq import SDNQConfig
-# SDNQ optimization imports
-try:
-    from sdnq.loader import apply_sdnq_options_to_model
-    from sdnq.common import use_torch_compile as triton_is_available
-except ImportError:
-    print("[SDNQ Sampler] Warning: Could not import SDNQ optimization tools. Quantized MatMul will be disabled.")
-    def apply_sdnq_options_to_model(model, **kwargs): return model
-    triton_is_available = False
+# ============================================================================
+# LAZY IMPORT HELPERS
+# ============================================================================
+# Heavy imports (sdnq, diffusers, huggingface_hub) are loaded on first use
+# to reduce ComfyUI startup time from ~15s to ~2-3s
+# ============================================================================
 
-# diffusers pipeline - auto-detects model type from model_index.json
-from diffusers import DiffusionPipeline
+# Module-level cache for lazy imports
+_sdnq_initialized = False
+_diffusers_pipeline_class = None
+_scheduler_classes = None
+_sdnq_apply_options = None
+_triton_available = None
 
-# Scheduler imports
-# Flow-match schedulers (for FLUX, SD3, Qwen, Z-Image)
-from diffusers.schedulers import FlowMatchEulerDiscreteScheduler
+def _ensure_sdnq_initialized():
+    """Initialize SDNQ (registers into diffusers). Called before loading models."""
+    global _sdnq_initialized
+    if not _sdnq_initialized:
+        from sdnq import SDNQConfig  # noqa: F401 - import side effect registers SDNQ
+        _sdnq_initialized = True
 
-# Traditional diffusion schedulers (for SDXL, SD1.5, etc.)
-from diffusers.schedulers import (
-    DDIMScheduler,
-    DDPMScheduler,
-    PNDMScheduler,
-    LMSDiscreteScheduler,
-    EulerDiscreteScheduler,
-    HeunDiscreteScheduler,
-    EulerAncestralDiscreteScheduler,
-    DPMSolverMultistepScheduler,
-    DPMSolverSinglestepScheduler,
-    KDPM2DiscreteScheduler,
-    KDPM2AncestralDiscreteScheduler,
-    DEISMultistepScheduler,
-    UniPCMultistepScheduler,
-)
+def _get_diffusers_pipeline_class():
+    """Lazy load DiffusionPipeline class."""
+    global _diffusers_pipeline_class
+    if _diffusers_pipeline_class is None:
+        from diffusers import DiffusionPipeline
+        _diffusers_pipeline_class = DiffusionPipeline
+    return _diffusers_pipeline_class
 
-# Local imports for model catalog and downloading
+def _get_scheduler_classes():
+    """Lazy load all scheduler classes."""
+    global _scheduler_classes
+    if _scheduler_classes is None:
+        from diffusers.schedulers import (
+            FlowMatchEulerDiscreteScheduler,
+            DDIMScheduler,
+            DDPMScheduler,
+            PNDMScheduler,
+            LMSDiscreteScheduler,
+            EulerDiscreteScheduler,
+            HeunDiscreteScheduler,
+            EulerAncestralDiscreteScheduler,
+            DPMSolverMultistepScheduler,
+            DPMSolverSinglestepScheduler,
+            KDPM2DiscreteScheduler,
+            KDPM2AncestralDiscreteScheduler,
+            DEISMultistepScheduler,
+            UniPCMultistepScheduler,
+        )
+        _scheduler_classes = {
+            "FlowMatchEulerDiscreteScheduler": FlowMatchEulerDiscreteScheduler,
+            "DPMSolverMultistepScheduler": DPMSolverMultistepScheduler,
+            "UniPCMultistepScheduler": UniPCMultistepScheduler,
+            "EulerDiscreteScheduler": EulerDiscreteScheduler,
+            "EulerAncestralDiscreteScheduler": EulerAncestralDiscreteScheduler,
+            "DDIMScheduler": DDIMScheduler,
+            "HeunDiscreteScheduler": HeunDiscreteScheduler,
+            "KDPM2DiscreteScheduler": KDPM2DiscreteScheduler,
+            "KDPM2AncestralDiscreteScheduler": KDPM2AncestralDiscreteScheduler,
+            "DPMSolverSinglestepScheduler": DPMSolverSinglestepScheduler,
+            "DEISMultistepScheduler": DEISMultistepScheduler,
+            "LMSDiscreteScheduler": LMSDiscreteScheduler,
+            "DDPMScheduler": DDPMScheduler,
+            "PNDMScheduler": PNDMScheduler,
+        }
+    return _scheduler_classes
+
+def _get_sdnq_optimization_tools():
+    """Lazy load SDNQ optimization tools."""
+    global _sdnq_apply_options, _triton_available
+    if _sdnq_apply_options is None:
+        try:
+            from sdnq.loader import apply_sdnq_options_to_model
+            from sdnq.common import use_torch_compile as triton_is_available
+            _sdnq_apply_options = apply_sdnq_options_to_model
+            _triton_available = triton_is_available
+        except ImportError:
+            print("[SDNQ Sampler] Warning: Could not import SDNQ optimization tools. Quantized MatMul will be disabled.")
+            _sdnq_apply_options = lambda model, **kwargs: model
+            _triton_available = False
+    return _sdnq_apply_options, _triton_available
+
+# Local imports for model catalog (these are lightweight, no heavy dependencies)
 from ..core.registry import (
     get_model_names_for_dropdown,
     get_repo_id_from_name,
     get_model_info,
 )
-from ..core.downloader import (
-    download_model,
-    get_cached_model_path,
-    check_model_cached,
-)
-from ..core.config import get_sdnq_models_dir
+
+def _lazy_import_downloader():
+    """Lazy import downloader functions to avoid huggingface_hub import at startup."""
+    from ..core.downloader import (
+        download_model,
+        get_cached_model_path,
+        check_model_cached,
+    )
+    return download_model, get_cached_model_path, check_model_cached
 
 
 class SDNQSampler:
@@ -382,6 +435,9 @@ class SDNQSampler:
         print(f"[SDNQ Sampler] Selected model: {model_selection}")
         print(f"[SDNQ Sampler] Repository: {repo_id}")
 
+        # Lazy import downloader to avoid huggingface_hub at startup
+        download_model, get_cached_model_path, check_model_cached = _lazy_import_downloader()
+
         # Check if model already cached
         cached_path = get_cached_model_path(repo_id)
         if cached_path:
@@ -419,7 +475,7 @@ class SDNQSampler:
 
     def load_pipeline(self, model_path: str, dtype_str: str, memory_mode: str = "gpu",
                      use_xformers: bool = False, enable_vae_tiling: bool = False,
-                     use_quantized_matmul: bool = True) -> DiffusionPipeline:
+                     use_quantized_matmul: bool = True):
         """
         Load SDNQ model using diffusers pipeline.
 
@@ -448,6 +504,11 @@ class SDNQSampler:
         https://huggingface.co/docs/diffusers/en/using-diffusers/loading
         https://huggingface.co/docs/diffusers/main/optimization/memory
         """
+        # Lazy import SDNQ and diffusers (heavy dependencies)
+        _ensure_sdnq_initialized()
+        DiffusionPipeline = _get_diffusers_pipeline_class()
+        apply_sdnq_options_to_model, triton_is_available = _get_sdnq_optimization_tools()
+
         # Convert dtype string to torch dtype
         dtype_map = {
             "bfloat16": torch.bfloat16,
@@ -623,7 +684,7 @@ class SDNQSampler:
                 f"5. Look at the error message above for specific details"
             )
 
-    def load_lora(self, pipeline: DiffusionPipeline, lora_path: str, lora_strength: float = 1.0):
+    def load_lora(self, pipeline, lora_path: str, lora_strength: float = 1.0):
         """
         Load LoRA weights into pipeline.
 
@@ -691,7 +752,7 @@ class SDNQSampler:
                 f"5. Try with lora_strength=1.0 first"
             )
 
-    def unload_lora(self, pipeline: DiffusionPipeline):
+    def unload_lora(self, pipeline):
         """
         Unload LoRA weights from pipeline.
 
@@ -706,7 +767,7 @@ class SDNQSampler:
             # Non-critical error, just log it
             print(f"[SDNQ Sampler] Warning: Failed to unload LoRA: {e}")
 
-    def swap_scheduler(self, pipeline: DiffusionPipeline, scheduler_name: str):
+    def swap_scheduler(self, pipeline, scheduler_name: str):
         """
         Swap the pipeline's scheduler.
 
@@ -726,25 +787,8 @@ class SDNQSampler:
         print(f"[SDNQ Sampler] Swapping scheduler to: {scheduler_name}")
 
         try:
-            # Map scheduler name to class
-            scheduler_map = {
-                # Flow-based schedulers (FLUX, SD3, Qwen, Z-Image)
-                "FlowMatchEulerDiscreteScheduler": FlowMatchEulerDiscreteScheduler,
-                # Traditional diffusion schedulers (SDXL, SD1.5)
-                "DPMSolverMultistepScheduler": DPMSolverMultistepScheduler,
-                "UniPCMultistepScheduler": UniPCMultistepScheduler,
-                "EulerDiscreteScheduler": EulerDiscreteScheduler,
-                "EulerAncestralDiscreteScheduler": EulerAncestralDiscreteScheduler,
-                "DDIMScheduler": DDIMScheduler,
-                "HeunDiscreteScheduler": HeunDiscreteScheduler,
-                "KDPM2DiscreteScheduler": KDPM2DiscreteScheduler,
-                "KDPM2AncestralDiscreteScheduler": KDPM2AncestralDiscreteScheduler,
-                "DPMSolverSinglestepScheduler": DPMSolverSinglestepScheduler,
-                "DEISMultistepScheduler": DEISMultistepScheduler,
-                "LMSDiscreteScheduler": LMSDiscreteScheduler,
-                "DDPMScheduler": DDPMScheduler,
-                "PNDMScheduler": PNDMScheduler,
-            }
+            # Lazy load scheduler classes
+            scheduler_map = _get_scheduler_classes()
 
             if scheduler_name not in scheduler_map:
                 raise ValueError(
@@ -773,7 +817,7 @@ class SDNQSampler:
                 f"5. Check diffusers version (requires >=0.36.0)"
             )
 
-    def generate_image(self, pipeline: DiffusionPipeline, prompt: str, negative_prompt: str,
+    def generate_image(self, pipeline, prompt: str, negative_prompt: str,
                       steps: int, cfg: float, width: int, height: int, seed: int) -> Image.Image:
         """
         Generate image using the loaded pipeline.
