@@ -99,8 +99,7 @@ pip install --upgrade git+https://github.com/huggingface/diffusers.git
 - `lora_strength`: -5.0 to +5.0 (1.0 = full strength)
 
 **Image Editing** (optional - connect LoadImage node):
-- `image1`: Source image for editing (Qwen-Image-Edit, ChronoEdit, etc.)
-- `image2`: Optional second image for multi-image editing
+- `image1`, `image2`, `image3`, `image4`: Source images for editing (Qwen-Image-Edit, ChronoEdit, etc.)
 - `image_resize`: Auto-resize inputs (512px-1536px options)
 
 **Outputs**: `IMAGE` (connects to SaveImage, Preview, etc.)
