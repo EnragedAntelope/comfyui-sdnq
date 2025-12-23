@@ -11,7 +11,8 @@ This custom node pack enables running [SDNQ (SD.Next Quantization)](https://gith
 ## Features
 
 - **🎨 Standalone Sampler**: All-in-one node - load model, generate images, done
-- **📦 Model Catalog**: 30+ pre-configured SDNQ models with auto-download
+- **📦 Model Catalog**: 20+ pre-configured SDNQ models with auto-download
+- **🖼️ Image Editing**: Optional image inputs for Qwen-Image-Edit, ChronoEdit, etc.
 - **💾 Smart Caching**: Download once, use forever
 - **🚀 VRAM Savings**: 50-75% memory reduction with quantization
 - **⚡ Performance Optimizations**: Optional xFormers, VAE tiling, SDPA (automatic)
@@ -26,7 +27,7 @@ This custom node pack enables running [SDNQ (SD.Next Quantization)](https://gith
 ### Method 1: ComfyUI Manager (Recommended)
 
 1. Install [ComfyUI Manager](https://github.com/ltdrdata/ComfyUI-Manager)
-2. Search for "SDNQ" in the manager
+2. Search for "comfyui-sdnq" in the manager
 3. Click Install
 4. Restart ComfyUI
 
@@ -74,7 +75,7 @@ pip install --upgrade git+https://github.com/huggingface/diffusers.git
 **Category**: `sampling/SDNQ`
 
 **Main Parameters**:
-- `model_selection`: Dropdown with 30+ pre-configured models
+- `model_selection`: Dropdown with 20+ pre-configured models
 - `custom_model_path`: For local models or custom HuggingFace repos
 - `prompt` / `negative_prompt`: What to create / what to avoid
 - `steps`, `cfg`, `width`, `height`, `seed`: Standard generation controls
@@ -97,13 +98,18 @@ pip install --upgrade git+https://github.com/huggingface/diffusers.git
 - `lora_custom_path`: Custom LoRA path or HuggingFace repo
 - `lora_strength`: -5.0 to +5.0 (1.0 = full strength)
 
+**Image Editing** (optional - connect LoadImage node):
+- `image1`: Source image for editing (Qwen-Image-Edit, ChronoEdit, etc.)
+- `image2`: Optional second image for multi-image editing
+- `image_resize`: Auto-resize inputs (512px-1536px options)
+
 **Outputs**: `IMAGE` (connects to SaveImage, Preview, etc.)
 
 ---
 
 ## Available Models
 
-30+ pre-configured models including:
+20+ pre-configured models including:
 - **FLUX**: FLUX.1-dev, FLUX.1-schnell, FLUX.2-dev, FLUX.1-Krea, FLUX.1-Kontext
 - **Qwen**: Qwen-Image variants (Edit, Lightning, Turbo)
 - **Z-Image**: Z-Image-Turbo (int8 and uint4 variants) - Fast T2I
@@ -182,7 +188,7 @@ Contributions welcome! Please:
 
 ## License
 
-Apache License 2.0 - See [LICENSE](LICENSE)
+See [LICENSE](LICENSE) for details.
 
 This project integrates with [SDNQ by Disty0](https://github.com/Disty0/sdnq).
 

@@ -352,6 +352,23 @@ class SDNQSampler:
                     "default": False,
                     "tooltip": "Enable VAE tiling for very large images (>1536px). Prevents out-of-memory errors on high resolutions. Minimal performance impact. Recommended for images >1536x1536."
                 }),
+
+                # ============================================================
+                # IMAGE INPUTS (For image editing models like Qwen-Image-Edit)
+                # ============================================================
+
+                "image1": ("IMAGE", {
+                    "tooltip": "Optional source image for image editing models (Qwen-Image-Edit, ChronoEdit, etc.). Leave unconnected for text-to-image generation."
+                }),
+
+                "image2": ("IMAGE", {
+                    "tooltip": "Optional second image for multi-image editing models (Qwen-Image-Edit-2509/2511). Not all models support multiple images."
+                }),
+
+                "image_resize": (["No Resize", "Small (512px)", "Medium (768px)", "Large (1024px)", "XL (1536px)"], {
+                    "default": "No Resize",
+                    "tooltip": "Resize input images before processing. Smaller = faster inference, less VRAM. 'No Resize' keeps original dimensions."
+                }),
             }
         }
 
@@ -376,6 +393,54 @@ class SDNQSampler:
         # ComfyUI provides comfy.model_management.interrupt_processing()
         # For now, we'll use a simple flag that can be extended
         return self.interrupted
+
+    def _convert_comfyui_image_to_pil(self, image_tensor, resize_option: str = "No Resize") -> Optional[Image.Image]:
+        """
+        Convert ComfyUI IMAGE tensor to PIL Image with optional resizing.
+
+        ComfyUI images are [B, H, W, C] float tensors in 0-1 range.
+
+        Args:
+            image_tensor: ComfyUI IMAGE tensor
+            resize_option: Resize option string
+
+        Returns:
+            PIL Image or None if conversion fails
+        """
+        if image_tensor is None:
+            return None
+
+        try:
+            # ComfyUI images are [B, H, W, C] - take first image from batch
+            img_array = image_tensor[0].cpu().numpy()
+            # Convert from 0-1 float to 0-255 uint8
+            img_array = (img_array * 255).astype(np.uint8)
+            pil_image = Image.fromarray(img_array)
+
+            # Resize if requested
+            resize_dimensions = {
+                "Small (512px)": 512,
+                "Medium (768px)": 768,
+                "Large (1024px)": 1024,
+                "XL (1536px)": 1536,
+            }
+
+            max_dim = resize_dimensions.get(resize_option)
+            if max_dim is not None:
+                width, height = pil_image.size
+                max_current = max(width, height)
+                if max_current > max_dim:
+                    scale = max_dim / max_current
+                    new_width = int(width * scale)
+                    new_height = int(height * scale)
+                    pil_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
+                    print(f"[SDNQ Sampler] Resized input image: {width}x{height} → {new_width}x{new_height}")
+
+            return pil_image.convert("RGB")
+
+        except Exception as e:
+            print(f"[SDNQ Sampler] Warning: Failed to convert input image: {e}")
+            return None
 
     def load_or_download_model(self, model_selection: str, custom_path: str, auto_download: bool) -> Tuple[str, bool]:
         """
@@ -818,7 +883,8 @@ class SDNQSampler:
             )
 
     def generate_image(self, pipeline, prompt: str, negative_prompt: str,
-                      steps: int, cfg: float, width: int, height: int, seed: int) -> Image.Image:
+                      steps: int, cfg: float, width: int, height: int, seed: int,
+                      source_images: Optional[list] = None) -> Image.Image:
         """
         Generate image using the loaded pipeline.
 
@@ -831,6 +897,7 @@ class SDNQSampler:
             width: Image width (must be multiple of 8)
             height: Image height (must be multiple of 8)
             seed: Random seed for reproducibility
+            source_images: Optional list of PIL Images for image editing (Qwen-Image-Edit, etc.)
 
         Returns:
             PIL Image object
@@ -841,11 +908,16 @@ class SDNQSampler:
         Based on verified API from FLUX examples:
         https://huggingface.co/docs/diffusers/main/api/pipelines/flux
         """
-        print(f"[SDNQ Sampler] Generating image...")
+        is_img2img = source_images and len(source_images) > 0
+        mode = "image-to-image" if is_img2img else "text-to-image"
+
+        print(f"[SDNQ Sampler] Generating image ({mode})...")
         print(f"[SDNQ Sampler]   Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
         print(f"[SDNQ Sampler]   Steps: {steps}, CFG: {cfg}")
         print(f"[SDNQ Sampler]   Size: {width}x{height}")
         print(f"[SDNQ Sampler]   Seed: {seed}")
+        if is_img2img:
+            print(f"[SDNQ Sampler]   Source images: {len(source_images)}")
 
         # Check for interruption before starting
         if self.check_interrupted():
@@ -863,10 +935,22 @@ class SDNQSampler:
                 "prompt": prompt,
                 "num_inference_steps": steps,
                 "guidance_scale": cfg,
-                "width": width,
-                "height": height,
                 "generator": generator,
             }
+
+            # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
+            # If source_images provided, this is img2img - don't set width/height (use source size)
+            # If no source_images, this is txt2img - set width/height
+            if is_img2img:
+                # For single image, pass directly; for multiple, pass as list
+                if len(source_images) == 1:
+                    pipeline_kwargs["image"] = source_images[0]
+                else:
+                    pipeline_kwargs["image"] = source_images
+            else:
+                # Text-to-image: specify output dimensions
+                pipeline_kwargs["width"] = width
+                pipeline_kwargs["height"] = height
 
             # Only add negative_prompt if it's not empty
             # Will be automatically removed if pipeline doesn't support it
@@ -972,7 +1056,8 @@ class SDNQSampler:
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
-                use_quantized_matmul: bool = True) -> Tuple[torch.Tensor]:
+                use_quantized_matmul: bool = True,
+                image1=None, image2=None, image_resize: str = "No Resize") -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -998,6 +1083,9 @@ class SDNQSampler:
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images
             use_quantized_matmul: Enable Triton quantized matmul optimization
+            image1: Optional source image for image editing (ComfyUI IMAGE tensor)
+            image2: Optional second image for multi-image editing
+            image_resize: Resize option for input images
 
         Returns:
             Tuple containing (IMAGE,) in ComfyUI format
@@ -1118,7 +1206,20 @@ class SDNQSampler:
                 if self.current_scheduler:
                     print(f"[SDNQ Sampler] Using cached scheduler: {scheduler}")
 
-            # Step 3: Generate image
+            # Step 3: Process optional source images for image editing
+            source_images = []
+            if image1 is not None:
+                pil_img1 = self._convert_comfyui_image_to_pil(image1, image_resize)
+                if pil_img1:
+                    source_images.append(pil_img1)
+                    print(f"[SDNQ Sampler] Added source image 1: {pil_img1.size}")
+            if image2 is not None:
+                pil_img2 = self._convert_comfyui_image_to_pil(image2, image_resize)
+                if pil_img2:
+                    source_images.append(pil_img2)
+                    print(f"[SDNQ Sampler] Added source image 2: {pil_img2.size}")
+
+            # Step 4: Generate image
             pil_image = self.generate_image(
                 self.pipeline,
                 prompt,
@@ -1127,10 +1228,11 @@ class SDNQSampler:
                 cfg,
                 width,
                 height,
-                seed
+                seed,
+                source_images=source_images if source_images else None
             )
 
-            # Step 4: Convert to ComfyUI format
+            # Step 5: Convert to ComfyUI format
             comfy_tensor = self.pil_to_comfy_tensor(pil_image)
 
             print(f"\n{'='*60}")
