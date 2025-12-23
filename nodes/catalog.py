@@ -72,8 +72,6 @@ class SDNQModelCatalog:
             output += f"   Repo: {info['repo_id']}\n"
             output += f"   Type: {info['type']}\n"
             output += f"   Quant: {info['quant_level']}\n"
-            output += f"   VRAM: {info['vram_required']}\n"
-            output += f"   Quality: {info['quality']}\n"
             output += f"   {info['description']}\n\n"
 
         output += "=" * 60 + "\n"

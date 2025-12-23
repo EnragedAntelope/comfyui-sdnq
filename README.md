@@ -41,6 +41,18 @@ pip install -r requirements.txt
 
 Restart ComfyUI after installation.
 
+### Updating Diffusers (for latest models)
+
+Some newer SDNQ models (like FLUX.2, Z-Image-Turbo, Qwen-Image-Edit-2511) require the latest diffusers. If you encounter errors loading new models:
+
+```bash
+# Standard upgrade (recommended)
+pip install --upgrade diffusers
+
+# If diffusers doesn't yet support the model you're trying
+pip install --upgrade git+https://github.com/huggingface/diffusers.git
+```
+
 ---
 
 ## Quick Start
@@ -94,8 +106,9 @@ Restart ComfyUI after installation.
 30+ pre-configured models including:
 - **FLUX**: FLUX.1-dev, FLUX.1-schnell, FLUX.2-dev, FLUX.1-Krea, FLUX.1-Kontext
 - **Qwen**: Qwen-Image variants (Edit, Lightning, Turbo)
+- **Z-Image**: Z-Image-Turbo (int8 and uint4 variants) - Fast T2I
 - **SD3/SDXL**: SD3-Medium, SD3.5-Large, NoobAI-XL variants
-- **Others**: Z-Image-Turbo, Chroma1-HD, HunyuanImage3, Video models
+- **Others**: Chroma1-HD, HunyuanImage3, ChronoEdit, Wan2.2 Video models
 
 Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https://huggingface.co/collections/Disty0/sdnq
 
