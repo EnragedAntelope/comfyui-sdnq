@@ -365,6 +365,14 @@ class SDNQSampler:
                     "tooltip": "Optional second image for multi-image editing models (Qwen-Image-Edit-2509/2511). Not all models support multiple images."
                 }),
 
+                "image3": ("IMAGE", {
+                    "tooltip": "Optional third image for multi-image editing models."
+                }),
+
+                "image4": ("IMAGE", {
+                    "tooltip": "Optional fourth image for multi-image editing models."
+                }),
+
                 "image_resize": (["No Resize", "Small (512px)", "Medium (768px)", "Large (1024px)", "XL (1536px)"], {
                     "default": "No Resize",
                     "tooltip": "Resize input images before processing. Smaller = faster inference, less VRAM. 'No Resize' keeps original dimensions."
@@ -630,22 +638,11 @@ class SDNQSampler:
                             )
                             print("[SDNQ Sampler] ✓ Optimization applied to UNet")
 
-                        # Apply to text encoders (if they are quantized, e.g. FLUX.2)
-                        if hasattr(pipeline, 'text_encoder') and pipeline.text_encoder is not None:
-                            # Only apply if it looks like a quantized model (has SDNQ layers)
-                            # Safe to try, sdnq loader checks internally
-                            pipeline.text_encoder = apply_sdnq_options_to_model(
-                                pipeline.text_encoder,
-                                use_quantized_matmul=True
-                            )
-                            print("[SDNQ Sampler] ✓ Optimization applied to text_encoder")
-
-                        if hasattr(pipeline, 'text_encoder_2') and pipeline.text_encoder_2 is not None:
-                            pipeline.text_encoder_2 = apply_sdnq_options_to_model(
-                                pipeline.text_encoder_2,
-                                use_quantized_matmul=True
-                            )
-                            print("[SDNQ Sampler] ✓ Optimization applied to text_encoder_2")
+                        # NOTE: We intentionally DO NOT apply quantized_matmul to text_encoders
+                        # VL models (Qwen, etc.) have text encoder dimensions that aren't multiples
+                        # of 8 (e.g., 3420), which causes SDNQ int8 matmul to fail with:
+                        # "mat2.size(1) must be a multiple of 8 for INT8 GEMM"
+                        # Only transformer/unet components are safe for this optimization.
 
                     except Exception as e:
                         print(f"[SDNQ Sampler] ⚠️  Failed to apply optimizations: {e}")
@@ -958,33 +955,62 @@ class SDNQSampler:
                 pipeline_kwargs["negative_prompt"] = negative_prompt
 
             # Try calling pipeline with all parameters
-            # If negative_prompt is unsupported, retry without it
+            # If certain parameters are unsupported, retry without them
             try:
                 result = pipeline(**pipeline_kwargs)
             except TypeError as e:
-                # Check if error is about negative_prompt parameter
-                if "negative_prompt" in str(e) and "unexpected keyword argument" in str(e):
-                    # Pipeline doesn't support negative_prompt (e.g., FLUX.2, FLUX-schnell)
-                    print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support negative_prompt - skipping it")
+                error_str = str(e)
+                import re
+                match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
+                param_name = match.group(1) if match else None
 
-                    # Remove negative_prompt and retry
+                # Handle 'negative_prompt' not supported (e.g., FLUX.2, FLUX-schnell)
+                if param_name == "negative_prompt":
+                    print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support negative_prompt - skipping it")
                     if "negative_prompt" in pipeline_kwargs:
                         del pipeline_kwargs["negative_prompt"]
-
-                    # Retry generation without negative_prompt
                     result = pipeline(**pipeline_kwargs)
+
+                # Handle 'image' not supported - fallback to text-to-image
+                elif param_name == "image":
+                    print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support image input - falling back to text-to-image mode")
+                    if "image" in pipeline_kwargs:
+                        del pipeline_kwargs["image"]
+                    # Add width/height back since we're doing text-to-image now
+                    pipeline_kwargs["width"] = width
+                    pipeline_kwargs["height"] = height
+                    result = pipeline(**pipeline_kwargs)
+
                 else:
                     # Different TypeError - re-raise with helpful message
-                    import re
-                    match = re.search(r"unexpected keyword argument '(\w+)'", str(e))
-                    param_name = match.group(1) if match else "unknown"
                     raise Exception(
-                        f"Pipeline doesn't support parameter: '{param_name}'\n\n"
-                        f"Error: {str(e)}\n\n"
+                        f"Pipeline doesn't support parameter: '{param_name or 'unknown'}'\n\n"
+                        f"Error: {error_str}\n\n"
                         f"Pipeline type: {type(pipeline).__name__}\n"
                         f"This pipeline has a different signature than expected.\n\n"
                         f"Please report this issue on GitHub with the pipeline type above."
                     )
+            except AttributeError as e:
+                # Handle pipelines that REQUIRE image input but didn't get one
+                # E.g., QwenImageEditPlusPipeline crashes with "'NoneType' object has no attribute 'size'"
+                error_str = str(e)
+                pipeline_name = type(pipeline).__name__
+
+                # Check if this looks like a missing image error
+                if "'NoneType' object" in error_str and ("size" in error_str or "shape" in error_str):
+                    # This is an image-editing pipeline that requires an image
+                    raise ValueError(
+                        f"This model requires an image input!\n\n"
+                        f"Pipeline: {pipeline_name}\n"
+                        f"Error: {error_str}\n\n"
+                        f"This appears to be an image-editing model (like Qwen-Image-Edit).\n"
+                        f"Please connect a LoadImage node to the 'image1' input.\n\n"
+                        f"If you want text-to-image generation, use a different model\n"
+                        f"(e.g., FLUX, SD3, Z-Image-Turbo)."
+                    )
+                else:
+                    # Other AttributeError - re-raise
+                    raise
 
             # Check for interruption after generation
             if self.check_interrupted():
@@ -1057,7 +1083,8 @@ class SDNQSampler:
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
                 use_quantized_matmul: bool = True,
-                image1=None, image2=None, image_resize: str = "No Resize") -> Tuple[torch.Tensor]:
+                image1=None, image2=None, image3=None, image4=None,
+                image_resize: str = "No Resize") -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -1085,6 +1112,8 @@ class SDNQSampler:
             use_quantized_matmul: Enable Triton quantized matmul optimization
             image1: Optional source image for image editing (ComfyUI IMAGE tensor)
             image2: Optional second image for multi-image editing
+            image3: Optional third image for multi-image editing
+            image4: Optional fourth image for multi-image editing
             image_resize: Resize option for input images
 
         Returns:
@@ -1208,16 +1237,12 @@ class SDNQSampler:
 
             # Step 3: Process optional source images for image editing
             source_images = []
-            if image1 is not None:
-                pil_img1 = self._convert_comfyui_image_to_pil(image1, image_resize)
-                if pil_img1:
-                    source_images.append(pil_img1)
-                    print(f"[SDNQ Sampler] Added source image 1: {pil_img1.size}")
-            if image2 is not None:
-                pil_img2 = self._convert_comfyui_image_to_pil(image2, image_resize)
-                if pil_img2:
-                    source_images.append(pil_img2)
-                    print(f"[SDNQ Sampler] Added source image 2: {pil_img2.size}")
+            for idx, img_tensor in enumerate([image1, image2, image3, image4], start=1):
+                if img_tensor is not None:
+                    pil_img = self._convert_comfyui_image_to_pil(img_tensor, image_resize)
+                    if pil_img:
+                        source_images.append(pil_img)
+                        print(f"[SDNQ Sampler] Added source image {idx}: {pil_img.size}")
 
             # Step 4: Generate image
             pil_image = self.generate_image(
