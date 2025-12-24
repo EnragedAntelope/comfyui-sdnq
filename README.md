@@ -143,7 +143,9 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 - Enable with `use_torch_compile=True` in the node
 - First run has 30-60 second compilation overhead (cached for subsequent runs)
 - Requires PyTorch 2.0+ and Triton (Linux) or triton-windows (Windows)
-- May cause errors on some models/hardware - disable if you see issues
+- **⚠️ CONFLICTS with xFormers** - cannot use both together (auto-disabled if xFormers is on)
+- RTX 50xx (Blackwell) support may be limited - disable if you see errors
+- Performance with quantized models may vary
 
 ---
 
@@ -199,6 +201,15 @@ If you see "xFormers not available" but have it installed:
 2. Verify repo ID is correct for custom models
 3. For local models, ensure path points to directory (not a file)
 4. Check model is actually SDNQ-quantized (from Disty0's collection)
+
+### torch.compile Issues
+
+If you see errors with `use_torch_compile=True`:
+1. **Disable xFormers** - they conflict and cannot be used together
+2. **RTX 50xx GPUs** - Blackwell support is still maturing, try disabling
+3. **First run is slow** - 30-60s compilation is normal, cached after that
+4. **Compilation errors** - try disabling; it's experimental and not all models work
+5. **No speedup** - quantized models may not benefit as much; SDPA is already active
 
 ---
 
