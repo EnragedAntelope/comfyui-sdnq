@@ -906,9 +906,18 @@ class SDNQSampler:
         https://huggingface.co/docs/diffusers/main/api/pipelines/flux
         """
         is_img2img = source_images and len(source_images) > 0
-        mode = "image-to-image" if is_img2img else "text-to-image"
+        pipeline_name = type(pipeline).__name__
+        is_qwen_pipeline = "Qwen" in pipeline_name or "Edit" in pipeline_name
+
+        if is_img2img:
+            mode = "image-to-image"
+        elif is_qwen_pipeline:
+            mode = "text-to-image (blank canvas)"
+        else:
+            mode = "text-to-image"
 
         print(f"[SDNQ Sampler] Generating image ({mode})...")
+        print(f"[SDNQ Sampler]   Pipeline: {pipeline_name}")
         print(f"[SDNQ Sampler]   Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
         print(f"[SDNQ Sampler]   Steps: {steps}, CFG: {cfg}")
         print(f"[SDNQ Sampler]   Size: {width}x{height}")
@@ -938,12 +947,23 @@ class SDNQSampler:
             # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
             # If source_images provided, this is img2img - don't set width/height (use source size)
             # If no source_images, this is txt2img - set width/height
+            # Note: pipeline_name and is_qwen_pipeline are computed earlier in this method
+
             if is_img2img:
                 # For single image, pass directly; for multiple, pass as list
                 if len(source_images) == 1:
                     pipeline_kwargs["image"] = source_images[0]
                 else:
                     pipeline_kwargs["image"] = source_images
+            elif is_qwen_pipeline:
+                # Qwen/Edit pipelines require an image even for "T2I" mode
+                # Create a blank white image of the requested size as a starting point
+                # This allows the model to generate from scratch while satisfying the image requirement
+                print(f"[SDNQ Sampler] ℹ️  {pipeline_name} requires an image input.")
+                print(f"[SDNQ Sampler] Creating blank {width}x{height} image for T2I mode...")
+                blank_image = Image.new("RGB", (width, height), color=(255, 255, 255))
+                pipeline_kwargs["image"] = blank_image
+                # Don't set width/height - let the pipeline use the image dimensions
             else:
                 # Text-to-image: specify output dimensions
                 pipeline_kwargs["width"] = width
@@ -992,21 +1012,20 @@ class SDNQSampler:
                     )
             except AttributeError as e:
                 # Handle pipelines that REQUIRE image input but didn't get one
-                # E.g., QwenImageEditPlusPipeline crashes with "'NoneType' object has no attribute 'size'"
+                # This shouldn't happen for Qwen pipelines now (we create blank images)
+                # but kept as a fallback for unexpected cases
                 error_str = str(e)
-                pipeline_name = type(pipeline).__name__
 
                 # Check if this looks like a missing image error
                 if "'NoneType' object" in error_str and ("size" in error_str or "shape" in error_str):
-                    # This is an image-editing pipeline that requires an image
                     raise ValueError(
                         f"This model requires an image input!\n\n"
                         f"Pipeline: {pipeline_name}\n"
                         f"Error: {error_str}\n\n"
-                        f"This appears to be an image-editing model (like Qwen-Image-Edit).\n"
+                        f"This appears to be an image-editing model.\n"
                         f"Please connect a LoadImage node to the 'image1' input.\n\n"
-                        f"If you want text-to-image generation, use a different model\n"
-                        f"(e.g., FLUX, SD3, Z-Image-Turbo)."
+                        f"If you want text-to-image generation, try a different model\n"
+                        f"or report this as a bug if the model should support T2I."
                     )
                 else:
                     # Other AttributeError - re-raise
