@@ -1,24 +1,14 @@
 [project]
 name = "comfyui-sdnq"
-version = "1.4.02"
 description = "ComfyUI custom node pack for loading SDNQ quantized models"
+version = "1.4.03"
 license = {file = "LICENSE"}
 
+[project.urls]
+Repository = "https://github.com/EnragedAntelope/comfyui-sdnq"
+# Used by Comfy Registry https://comfyregistry.org
+
 [tool.comfy]
-# Required for ComfyUI Registry publishing
-# Get your publisher ID from https://comfyregistry.org
 PublisherId = "enragedantelope"
 DisplayName = "SDNQ Model Loader"
 Icon = ""
-keywords = [
-    "comfyui",
-    "sdnq",
-    "quantization",
-    "stable-diffusion",
-    "diffusers"
-]
-[project.urls]
-Homepage = "https://github.com/EnragedAntelope/comfyui-sdnq"
-Repository = "https://github.com/EnragedAntelope/comfyui-sdnq"
-Issues = "https://github.com/EnragedAntelope/comfyui-sdnq/issues"
-"Pre-quantized Models" = "https://huggingface.co/collections/Disty0/sdnq"
