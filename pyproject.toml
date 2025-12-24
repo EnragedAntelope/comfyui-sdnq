@@ -1,29 +1,30 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "comfyui-sdnq"
-version = "1.4.0"
+version = "1.4.01"
 description = "ComfyUI custom node pack for loading SDNQ quantized models"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {file = "LICENSE"}
-authors = [
-    {name = "ComfyUI-SDNQ Contributors"}
-]
+authors = "enragedantelope"
+[tool.comfy]
+# Required for ComfyUI Registry publishing
+# Get your publisher ID from https://comfyregistry.org
+PublisherId = "enragedantelope"
+DisplayName = "SDNQ Model Loader"
+Icon = ""
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 keywords = [
     "comfyui",
     "sdnq",
     "quantization",
     "stable-diffusion",
-    "flux",
     "diffusers"
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -32,7 +33,7 @@ classifiers = [
 
 dependencies = [
     "torch>=2.0.0",
-    "diffusers>=0.30.0",
+    "diffusers>=0.36.0",
     "transformers>=4.40.0",
     "huggingface-hub>=0.20.0",
     "safetensors>=0.4.0",
@@ -43,15 +44,7 @@ dependencies = [
 Homepage = "https://github.com/EnragedAntelope/comfyui-sdnq"
 Repository = "https://github.com/EnragedAntelope/comfyui-sdnq"
 Issues = "https://github.com/EnragedAntelope/comfyui-sdnq/issues"
-"SDNQ Repository" = "https://github.com/Disty0/sdnq"
 "Pre-quantized Models" = "https://huggingface.co/collections/Disty0/sdnq"
-
-[tool.comfy]
-# Required for ComfyUI Registry publishing
-# Get your publisher ID from https://comfyregistry.org
-PublisherId = "enragedantelope"
-DisplayName = "SDNQ Model Loader"
-Icon = ""
 
 [tool.setuptools]
 packages = ["nodes", "core"]
