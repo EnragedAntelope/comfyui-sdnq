@@ -162,6 +162,7 @@ class SDNQSampler:
         self.current_use_xformers = None
         self.current_enable_vae_tiling = None
         self.current_use_quantized_matmul = None
+        self.current_use_torch_compile = None
         self.interrupted = False
 
     @classmethod
@@ -353,6 +354,11 @@ class SDNQSampler:
                 "enable_vae_tiling": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Enable VAE tiling for very large images (>1536px). Prevents out-of-memory errors on high resolutions. Minimal performance impact. Recommended for images >1536x1536."
+                }),
+
+                "use_torch_compile": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "EXPERIMENTAL: Compile transformer with torch.compile for ~30% speedup after first run. First run has 30-60s compilation overhead. Requires PyTorch 2.0+ and Triton. May cause errors on some models/hardware."
                 }),
 
                 # ============================================================
@@ -566,7 +572,7 @@ class SDNQSampler:
 
     def load_pipeline(self, model_path: str, dtype_str: str, memory_mode: str = "gpu",
                      use_xformers: bool = False, enable_vae_tiling: bool = False,
-                     use_quantized_matmul: bool = True):
+                     use_quantized_matmul: bool = True, use_torch_compile: bool = False):
         """
         Load SDNQ model using diffusers pipeline.
 
@@ -584,6 +590,7 @@ class SDNQSampler:
             use_xformers: Enable xFormers memory-efficient attention
             enable_vae_tiling: Enable VAE tiling for large images
             use_quantized_matmul: Enable Triton quantized matmul optimization
+            use_torch_compile: Enable torch.compile for transformer (experimental)
 
         Returns:
             Loaded diffusers pipeline
@@ -672,6 +679,44 @@ class SDNQSampler:
                         print("[SDNQ Sampler] ℹ️  Triton not available. Install: 'pip install triton' (Linux) or 'pip install triton-windows' (Windows).")
             else:
                 print("[SDNQ Sampler] Quantized MatMul optimization disabled.")
+
+            # Apply torch.compile optimization (EXPERIMENTAL)
+            # Compiles transformer/unet for ~30% speedup after first run
+            if use_torch_compile:
+                if torch.cuda.is_available():
+                    print("[SDNQ Sampler] Applying torch.compile (EXPERIMENTAL)...")
+                    print("[SDNQ Sampler] ⚠️  First run will be slow (30-60s compilation overhead)")
+                    try:
+                        # Check PyTorch version
+                        torch_version = tuple(int(x) for x in torch.__version__.split('.')[:2])
+                        if torch_version < (2, 0):
+                            print(f"[SDNQ Sampler] ⚠️  torch.compile requires PyTorch 2.0+, got {torch.__version__}")
+                        else:
+                            # Compile transformer (FLUX, SD3)
+                            if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
+                                pipeline.transformer = torch.compile(
+                                    pipeline.transformer,
+                                    backend="inductor",
+                                    mode="max-autotune"
+                                )
+                                print("[SDNQ Sampler] ✓ torch.compile applied to transformer")
+
+                            # Compile UNet (SDXL, SD1.5)
+                            if hasattr(pipeline, 'unet') and pipeline.unet is not None:
+                                pipeline.unet = torch.compile(
+                                    pipeline.unet,
+                                    backend="inductor",
+                                    mode="max-autotune"
+                                )
+                                print("[SDNQ Sampler] ✓ torch.compile applied to UNet")
+
+                    except Exception as e:
+                        print(f"[SDNQ Sampler] ⚠️  torch.compile failed: {e}")
+                        print("[SDNQ Sampler] This is experimental - continuing without compilation")
+                else:
+                    print("[SDNQ Sampler] ℹ️  torch.compile requires CUDA. Skipping compilation.")
+            else:
+                print("[SDNQ Sampler] torch.compile disabled (enable for ~30% speedup after first run)")
 
             # CRITICAL: Apply xFormers BEFORE memory management
             # xFormers must be enabled before CPU offloading is set up
@@ -1133,7 +1178,7 @@ class SDNQSampler:
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
-                use_quantized_matmul: bool = True,
+                use_quantized_matmul: bool = True, use_torch_compile: bool = False,
                 image1=None, image2=None, image3=None, image4=None,
                 image_resize: str = "No Resize") -> Tuple[torch.Tensor]:
         """
@@ -1161,6 +1206,7 @@ class SDNQSampler:
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images
             use_quantized_matmul: Enable Triton quantized matmul optimization
+            use_torch_compile: Enable torch.compile for transformer (experimental, ~30% speedup)
             image1: Optional source image for image editing (ComfyUI IMAGE tensor)
             image2: Optional second image for multi-image editing
             image3: Optional third image for multi-image editing
@@ -1193,21 +1239,23 @@ class SDNQSampler:
             # Check if we need to reload the pipeline
             # Cache is invalidated if any of these change:
             # - Model path, dtype, memory mode
-            # - Performance optimization settings (xformers, vae_tiling, quantized_matmul)
+            # - Performance optimization settings (xformers, vae_tiling, quantized_matmul, torch_compile)
             if (self.pipeline is None or
                 self.current_model_path != model_path or
                 self.current_dtype != dtype or
                 self.current_memory_mode != memory_mode or
                 self.current_use_xformers != use_xformers or
                 self.current_enable_vae_tiling != enable_vae_tiling or
-                self.current_use_quantized_matmul != use_quantized_matmul):
+                self.current_use_quantized_matmul != use_quantized_matmul or
+                self.current_use_torch_compile != use_torch_compile):
 
                 print(f"[SDNQ Sampler] Pipeline cache miss - loading model...")
                 self.pipeline = self.load_pipeline(
                     model_path, dtype, memory_mode,
                     use_xformers=use_xformers,
                     enable_vae_tiling=enable_vae_tiling,
-                    use_quantized_matmul=use_quantized_matmul
+                    use_quantized_matmul=use_quantized_matmul,
+                    use_torch_compile=use_torch_compile
                 )
                 self.current_model_path = model_path
                 self.current_dtype = dtype
@@ -1215,6 +1263,7 @@ class SDNQSampler:
                 self.current_use_xformers = use_xformers
                 self.current_enable_vae_tiling = enable_vae_tiling
                 self.current_use_quantized_matmul = use_quantized_matmul
+                self.current_use_torch_compile = use_torch_compile
                 # Clear LoRA and scheduler cache when pipeline changes
                 self.current_lora_path = None
                 self.current_lora_strength = None

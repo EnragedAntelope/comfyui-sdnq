@@ -139,10 +139,11 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 - SDXL/SD1.5: Use `DPMSolverMultistepScheduler`, `EulerDiscreteScheduler`, or `UniPCMultistepScheduler`
 - Wrong scheduler = broken images!
 
-**Advanced: torch.compile** (2x-2.5x speedup, experimental):
-- Requires Triton and compatible PyTorch/CUDA versions
-- Configure in SDNQ directly via SD.Next or environment settings
-- May have compatibility issues; not all models/hardware combinations work
+**Advanced: torch.compile** (~30% speedup after first run, experimental):
+- Enable with `use_torch_compile=True` in the node
+- First run has 30-60 second compilation overhead (cached for subsequent runs)
+- Requires PyTorch 2.0+ and Triton (Linux) or triton-windows (Windows)
+- May cause errors on some models/hardware - disable if you see issues
 
 ---
 
