@@ -1,31 +1,22 @@
 # ComfyUI-SDNQ Dependencies
 # ========================
-# These are MINIMUM version requirements. If you already have newer versions
-# installed (e.g., diffusers from GitHub), pip will NOT downgrade them.
+# These are MINIMUM version requirements. We avoid specifying diffusers/transformers
+# since ComfyUI typically has them pre-installed, and specifying versions can cause
+# package managers (pip, uv) to downgrade dev/git versions.
 #
-# For latest model support (FLUX.2, Z-Image-Turbo, Qwen-Image-Edit-2511):
+# If you need a newer diffusers for latest models (FLUX.2, Z-Image-Turbo, etc.):
 #   pip install --upgrade diffusers
 # Or install from GitHub if the model isn't yet in the PyPI release:
 #   pip install --upgrade git+https://github.com/huggingface/diffusers.git
 
-# SDNQ quantization engine (includes quantized models support)
+# SDNQ quantization engine (includes diffusers as a dependency)
 sdnq>=0.1.0
 
-# Diffusers - minimum version for most models
-# Newer versions may be required for latest models (see README)
-diffusers>=0.36.0
-
-# Transformers for text encoding
-transformers>=4.40.0
-
-# HuggingFace Hub integration
+# HuggingFace Hub integration (for model downloads)
 huggingface-hub>=0.20.0
 
-# Model serialization
+# Model serialization (usually pre-installed)
 safetensors>=0.4.0
-
-# PyTorch (required but usually pre-installed with ComfyUI)
-torch>=2.0.0
 
 # Acceleration utilities
 accelerate>=0.25.0

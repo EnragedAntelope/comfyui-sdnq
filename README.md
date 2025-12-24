@@ -119,6 +119,16 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 
 ## Performance Tips
 
+**Speed Optimization Hierarchy** (from Disty0's recommendations):
+1. **Triton + Quantized MatMul**: 30-80% faster than BF16/FP16 (enabled by default)
+2. **xFormers**: Additional 10-45% speedup (enable with `use_xformers=True`)
+3. **SDPA**: Always active (automatic PyTorch 2.0+ optimization)
+
+**Triton Installation**:
+- **Linux**: `pip install triton`
+- **Windows**: `pip install triton-windows` (native Windows support, no WSL needed!)
+- Triton is auto-detected; if unavailable, the node continues without it
+
 **For All Memory Modes**:
 - SDPA (Scaled Dot Product Attention) is always active - automatic PyTorch 2.0+ optimization
 - Enable `use_xformers=True` for 10-45% additional speedup (safe to try)
@@ -128,6 +138,20 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 - FLUX/SD3/Qwen/Z-Image: Use `FlowMatchEulerDiscreteScheduler`
 - SDXL/SD1.5: Use `DPMSolverMultistepScheduler`, `EulerDiscreteScheduler`, or `UniPCMultistepScheduler`
 - Wrong scheduler = broken images!
+
+**Advanced: torch.compile** (2x-2.5x speedup, experimental):
+- Requires Triton and compatible PyTorch/CUDA versions
+- Configure in SDNQ directly via SD.Next or environment settings
+- May have compatibility issues; not all models/hardware combinations work
+
+---
+
+## Interrupt Support
+
+The node supports ComfyUI's interrupt mechanism:
+- Click "Cancel" in ComfyUI to stop generation mid-process
+- The node checks for interrupts at each denoising step
+- Partial results are discarded when interrupted
 
 ---
 
@@ -153,6 +177,9 @@ If you see "xFormers not available" but have it installed:
 ### Performance is Slow
 
 **Balanced/lowvram modes**: Inherently slower due to CPU↔GPU data movement. Options:
+- Install Triton for Quantized MatMul (30-80% speedup):
+  - Linux: `pip install triton`
+  - Windows: `pip install triton-windows`
 - Enable `use_xformers=True` (10-45% speedup if compatible)
 - SDPA is always active for automatic optimization
 - Upgrade to more VRAM for full GPU mode

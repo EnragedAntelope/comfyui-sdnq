@@ -24,13 +24,15 @@ import os
 import warnings
 from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
 
-# ComfyUI imports for LoRA folder access
+# ComfyUI imports for LoRA folder access and interrupt handling
 try:
     import folder_paths
+    import comfy.model_management
     COMFYUI_AVAILABLE = True
 except ImportError:
     COMFYUI_AVAILABLE = False
-    print("[SDNQ Sampler] Warning: folder_paths not available - LoRA dropdown will be disabled")
+    comfy = None
+    print("[SDNQ Sampler] Warning: ComfyUI modules not available - LoRA dropdown and interrupt handling will be disabled")
 
 # ============================================================================
 # LAZY IMPORT HELPERS
@@ -340,7 +342,7 @@ class SDNQSampler:
 
                 "use_quantized_matmul": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Enable Triton quantized matmul for ~20% speedup. Precision (int8/fp8) is automatically determined by the model and hardware. Requires Linux/WSL with Triton support."
+                    "tooltip": "Enable Triton quantized matmul for 30-80% speedup (varies by GPU). Linux: install 'triton'. Windows: install 'triton-windows' (pip install triton-windows). Auto-disabled if Triton unavailable."
                 }),
 
                 "use_xformers": ("BOOLEAN", {
@@ -398,9 +400,25 @@ class SDNQSampler:
 
     def check_interrupted(self):
         """Check if generation should be interrupted (ComfyUI interrupt support)."""
-        # ComfyUI provides comfy.model_management.interrupt_processing()
-        # For now, we'll use a simple flag that can be extended
-        return self.interrupted
+        if self.interrupted:
+            return True
+        # Check ComfyUI's global interrupt flag
+        if COMFYUI_AVAILABLE:
+            try:
+                return comfy.model_management.processing_interrupted()
+            except Exception:
+                pass
+        return False
+
+    def _create_interrupt_callback(self):
+        """Create a callback for diffusers pipeline that checks for interrupts each step."""
+        def interrupt_callback(pipeline, step, timestep, callback_kwargs):
+            if self.check_interrupted():
+                # Set the pipeline's internal interrupt flag
+                pipeline._interrupt = True
+                print(f"[SDNQ Sampler] Interrupt detected at step {step}, stopping generation...")
+            return callback_kwargs
+        return interrupt_callback
 
     def _convert_comfyui_image_to_pil(self, image_tensor, resize_option: str = "No Resize") -> Optional[Image.Image]:
         """
@@ -651,7 +669,7 @@ class SDNQSampler:
                     if not torch.cuda.is_available():
                         print("[SDNQ Sampler] ℹ️  Quantized MatMul requires CUDA. Optimization disabled.")
                     elif not triton_is_available:
-                        print("[SDNQ Sampler] ℹ️  Triton not available/supported (requires Linux/WSL). Quantized MatMul disabled.")
+                        print("[SDNQ Sampler] ℹ️  Triton not available. Install: 'pip install triton' (Linux) or 'pip install triton-windows' (Windows).")
             else:
                 print("[SDNQ Sampler] Quantized MatMul optimization disabled.")
 
@@ -942,6 +960,7 @@ class SDNQSampler:
                 "num_inference_steps": steps,
                 "guidance_scale": cfg,
                 "generator": generator,
+                "callback_on_step_end": self._create_interrupt_callback(),
             }
 
             # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
@@ -984,8 +1003,15 @@ class SDNQSampler:
                 match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
                 param_name = match.group(1) if match else None
 
+                # Handle 'callback_on_step_end' not supported (older pipelines)
+                if param_name == "callback_on_step_end":
+                    print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support step callbacks - interrupt may be delayed")
+                    if "callback_on_step_end" in pipeline_kwargs:
+                        del pipeline_kwargs["callback_on_step_end"]
+                    result = pipeline(**pipeline_kwargs)
+
                 # Handle 'negative_prompt' not supported (e.g., FLUX.2, FLUX-schnell)
-                if param_name == "negative_prompt":
+                elif param_name == "negative_prompt":
                     print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support negative_prompt - skipping it")
                     if "negative_prompt" in pipeline_kwargs:
                         del pipeline_kwargs["negative_prompt"]
@@ -1031,9 +1057,15 @@ class SDNQSampler:
                     # Other AttributeError - re-raise
                     raise
 
-            # Check for interruption after generation
+            # Check for interruption after generation (catches both callback and manual interrupts)
             if self.check_interrupted():
                 raise InterruptedError("Generation interrupted by user")
+
+            # Check if result has images (may be empty if interrupted)
+            if not hasattr(result, 'images') or not result.images:
+                if self.check_interrupted():
+                    raise InterruptedError("Generation interrupted by user")
+                raise RuntimeError("Pipeline returned no images - generation may have failed silently")
 
             # Extract first image from results
             # result.images[0] is a PIL.Image.Image object
