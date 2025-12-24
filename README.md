@@ -3,8 +3,7 @@
 **Load and run SDNQ quantized models in ComfyUI with 50-75% VRAM savings!**
 
 This custom AIO node enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
-
-<img width="2332" height="1132" alt="image" src="https://github.com/user-attachments/assets/ca5562d0-36a7-49a7-80e6-ce45916915f0" />
+<img width="2315" height="1121" alt="image" src="https://github.com/user-attachments/assets/4011ab36-e197-4543-8d7f-cf90ee4dee82" />
 
 ---
 
