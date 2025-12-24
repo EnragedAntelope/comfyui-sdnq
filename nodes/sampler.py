@@ -24,13 +24,15 @@ import os
 import warnings
 from typing import Optional, Tuple, Dict, Any, TYPE_CHECKING
 
-# ComfyUI imports for LoRA folder access
+# ComfyUI imports for LoRA folder access and interrupt handling
 try:
     import folder_paths
+    import comfy.model_management
     COMFYUI_AVAILABLE = True
 except ImportError:
     COMFYUI_AVAILABLE = False
-    print("[SDNQ Sampler] Warning: folder_paths not available - LoRA dropdown will be disabled")
+    comfy = None
+    print("[SDNQ Sampler] Warning: ComfyUI modules not available - LoRA dropdown and interrupt handling will be disabled")
 
 # ============================================================================
 # LAZY IMPORT HELPERS
@@ -160,6 +162,7 @@ class SDNQSampler:
         self.current_use_xformers = None
         self.current_enable_vae_tiling = None
         self.current_use_quantized_matmul = None
+        self.current_use_torch_compile = None
         self.interrupted = False
 
     @classmethod
@@ -340,7 +343,7 @@ class SDNQSampler:
 
                 "use_quantized_matmul": ("BOOLEAN", {
                     "default": True,
-                    "tooltip": "Enable Triton quantized matmul for ~20% speedup. Precision (int8/fp8) is automatically determined by the model and hardware. Requires Linux/WSL with Triton support."
+                    "tooltip": "Enable Triton quantized matmul for 30-80% speedup (varies by GPU). Linux: install 'triton'. Windows: install 'triton-windows' (pip install triton-windows). Auto-disabled if Triton unavailable."
                 }),
 
                 "use_xformers": ("BOOLEAN", {
@@ -351,6 +354,11 @@ class SDNQSampler:
                 "enable_vae_tiling": ("BOOLEAN", {
                     "default": False,
                     "tooltip": "Enable VAE tiling for very large images (>1536px). Prevents out-of-memory errors on high resolutions. Minimal performance impact. Recommended for images >1536x1536."
+                }),
+
+                "use_torch_compile": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "EXPERIMENTAL: Compile transformer with torch.compile for ~30% speedup after first run. First run has 30-60s overhead (cached after). Requires PyTorch 2.0+ and Triton. CONFLICTS with xFormers - but torch.compile + SDPA (default) is actually faster than xFormers!"
                 }),
 
                 # ============================================================
@@ -398,9 +406,25 @@ class SDNQSampler:
 
     def check_interrupted(self):
         """Check if generation should be interrupted (ComfyUI interrupt support)."""
-        # ComfyUI provides comfy.model_management.interrupt_processing()
-        # For now, we'll use a simple flag that can be extended
-        return self.interrupted
+        if self.interrupted:
+            return True
+        # Check ComfyUI's global interrupt flag
+        if COMFYUI_AVAILABLE:
+            try:
+                return comfy.model_management.processing_interrupted()
+            except Exception:
+                pass
+        return False
+
+    def _create_interrupt_callback(self):
+        """Create a callback for diffusers pipeline that checks for interrupts each step."""
+        def interrupt_callback(pipeline, step, timestep, callback_kwargs):
+            if self.check_interrupted():
+                # Set the pipeline's internal interrupt flag
+                pipeline._interrupt = True
+                print(f"[SDNQ Sampler] Interrupt detected at step {step}, stopping generation...")
+            return callback_kwargs
+        return interrupt_callback
 
     def _convert_comfyui_image_to_pil(self, image_tensor, resize_option: str = "No Resize") -> Optional[Image.Image]:
         """
@@ -548,7 +572,7 @@ class SDNQSampler:
 
     def load_pipeline(self, model_path: str, dtype_str: str, memory_mode: str = "gpu",
                      use_xformers: bool = False, enable_vae_tiling: bool = False,
-                     use_quantized_matmul: bool = True):
+                     use_quantized_matmul: bool = True, use_torch_compile: bool = False):
         """
         Load SDNQ model using diffusers pipeline.
 
@@ -566,6 +590,7 @@ class SDNQSampler:
             use_xformers: Enable xFormers memory-efficient attention
             enable_vae_tiling: Enable VAE tiling for large images
             use_quantized_matmul: Enable Triton quantized matmul optimization
+            use_torch_compile: Enable torch.compile for transformer (experimental)
 
         Returns:
             Loaded diffusers pipeline
@@ -651,9 +676,54 @@ class SDNQSampler:
                     if not torch.cuda.is_available():
                         print("[SDNQ Sampler] ℹ️  Quantized MatMul requires CUDA. Optimization disabled.")
                     elif not triton_is_available:
-                        print("[SDNQ Sampler] ℹ️  Triton not available/supported (requires Linux/WSL). Quantized MatMul disabled.")
+                        print("[SDNQ Sampler] ℹ️  Triton not available. Install: 'pip install triton' (Linux) or 'pip install triton-windows' (Windows).")
             else:
                 print("[SDNQ Sampler] Quantized MatMul optimization disabled.")
+
+            # Apply torch.compile optimization (EXPERIMENTAL)
+            # Compiles transformer/unet for ~30% speedup after first run
+            # NOTE: torch.compile + SDPA (default) is faster than xFormers per HuggingFace docs
+            # WARNING: Known conflicts with xFormers - they should not be used together
+            if use_torch_compile:
+                # Check for xFormers conflict first
+                if use_xformers:
+                    print("[SDNQ Sampler] ⚠️  torch.compile conflicts with xFormers - skipping compilation")
+                    print("[SDNQ Sampler] ℹ️  Tip: torch.compile + SDPA (default) is faster than xFormers alone")
+                    print("[SDNQ Sampler] ℹ️  Consider disabling xFormers to use torch.compile instead")
+                elif not torch.cuda.is_available():
+                    print("[SDNQ Sampler] ℹ️  torch.compile requires CUDA. Skipping compilation.")
+                else:
+                    print("[SDNQ Sampler] Applying torch.compile (EXPERIMENTAL)...")
+                    print("[SDNQ Sampler] ⚠️  First run will be slow (30-60s compilation overhead)")
+
+                    # Check for potential issues
+                    try:
+                        # Check PyTorch version
+                        torch_version = tuple(int(x) for x in torch.__version__.split('.')[:2])
+                        if torch_version < (2, 0):
+                            print(f"[SDNQ Sampler] ⚠️  torch.compile requires PyTorch 2.0+, got {torch.__version__}")
+                        else:
+                            # Compile transformer (FLUX, SD3)
+                            if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
+                                pipeline.transformer = torch.compile(
+                                    pipeline.transformer,
+                                    backend="inductor",
+                                    mode="max-autotune"
+                                )
+                                print("[SDNQ Sampler] ✓ torch.compile applied to transformer")
+
+                            # Compile UNet (SDXL, SD1.5)
+                            if hasattr(pipeline, 'unet') and pipeline.unet is not None:
+                                pipeline.unet = torch.compile(
+                                    pipeline.unet,
+                                    backend="inductor",
+                                    mode="max-autotune"
+                                )
+                                print("[SDNQ Sampler] ✓ torch.compile applied to UNet")
+
+                    except Exception as e:
+                        print(f"[SDNQ Sampler] ⚠️  torch.compile failed: {e}")
+                        print("[SDNQ Sampler] This is experimental - continuing without compilation")
 
             # CRITICAL: Apply xFormers BEFORE memory management
             # xFormers must be enabled before CPU offloading is set up
@@ -942,6 +1012,7 @@ class SDNQSampler:
                 "num_inference_steps": steps,
                 "guidance_scale": cfg,
                 "generator": generator,
+                "callback_on_step_end": self._create_interrupt_callback(),
             }
 
             # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
@@ -984,8 +1055,15 @@ class SDNQSampler:
                 match = re.search(r"unexpected keyword argument '(\w+)'", error_str)
                 param_name = match.group(1) if match else None
 
+                # Handle 'callback_on_step_end' not supported (older pipelines)
+                if param_name == "callback_on_step_end":
+                    print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support step callbacks - interrupt may be delayed")
+                    if "callback_on_step_end" in pipeline_kwargs:
+                        del pipeline_kwargs["callback_on_step_end"]
+                    result = pipeline(**pipeline_kwargs)
+
                 # Handle 'negative_prompt' not supported (e.g., FLUX.2, FLUX-schnell)
-                if param_name == "negative_prompt":
+                elif param_name == "negative_prompt":
                     print(f"[SDNQ Sampler] ⚠️  Pipeline {type(pipeline).__name__} doesn't support negative_prompt - skipping it")
                     if "negative_prompt" in pipeline_kwargs:
                         del pipeline_kwargs["negative_prompt"]
@@ -1031,9 +1109,15 @@ class SDNQSampler:
                     # Other AttributeError - re-raise
                     raise
 
-            # Check for interruption after generation
+            # Check for interruption after generation (catches both callback and manual interrupts)
             if self.check_interrupted():
                 raise InterruptedError("Generation interrupted by user")
+
+            # Check if result has images (may be empty if interrupted)
+            if not hasattr(result, 'images') or not result.images:
+                if self.check_interrupted():
+                    raise InterruptedError("Generation interrupted by user")
+                raise RuntimeError("Pipeline returned no images - generation may have failed silently")
 
             # Extract first image from results
             # result.images[0] is a PIL.Image.Image object
@@ -1101,7 +1185,7 @@ class SDNQSampler:
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
-                use_quantized_matmul: bool = True,
+                use_quantized_matmul: bool = True, use_torch_compile: bool = False,
                 image1=None, image2=None, image3=None, image4=None,
                 image_resize: str = "No Resize") -> Tuple[torch.Tensor]:
         """
@@ -1129,6 +1213,7 @@ class SDNQSampler:
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images
             use_quantized_matmul: Enable Triton quantized matmul optimization
+            use_torch_compile: Enable torch.compile for transformer (experimental, ~30% speedup)
             image1: Optional source image for image editing (ComfyUI IMAGE tensor)
             image2: Optional second image for multi-image editing
             image3: Optional third image for multi-image editing
@@ -1161,21 +1246,23 @@ class SDNQSampler:
             # Check if we need to reload the pipeline
             # Cache is invalidated if any of these change:
             # - Model path, dtype, memory mode
-            # - Performance optimization settings (xformers, vae_tiling, quantized_matmul)
+            # - Performance optimization settings (xformers, vae_tiling, quantized_matmul, torch_compile)
             if (self.pipeline is None or
                 self.current_model_path != model_path or
                 self.current_dtype != dtype or
                 self.current_memory_mode != memory_mode or
                 self.current_use_xformers != use_xformers or
                 self.current_enable_vae_tiling != enable_vae_tiling or
-                self.current_use_quantized_matmul != use_quantized_matmul):
+                self.current_use_quantized_matmul != use_quantized_matmul or
+                self.current_use_torch_compile != use_torch_compile):
 
                 print(f"[SDNQ Sampler] Pipeline cache miss - loading model...")
                 self.pipeline = self.load_pipeline(
                     model_path, dtype, memory_mode,
                     use_xformers=use_xformers,
                     enable_vae_tiling=enable_vae_tiling,
-                    use_quantized_matmul=use_quantized_matmul
+                    use_quantized_matmul=use_quantized_matmul,
+                    use_torch_compile=use_torch_compile
                 )
                 self.current_model_path = model_path
                 self.current_dtype = dtype
@@ -1183,6 +1270,7 @@ class SDNQSampler:
                 self.current_use_xformers = use_xformers
                 self.current_enable_vae_tiling = enable_vae_tiling
                 self.current_use_quantized_matmul = use_quantized_matmul
+                self.current_use_torch_compile = use_torch_compile
                 # Clear LoRA and scheduler cache when pipeline changes
                 self.current_lora_path = None
                 self.current_lora_strength = None

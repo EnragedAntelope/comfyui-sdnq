@@ -2,7 +2,7 @@
 
 **Load and run SDNQ quantized models in ComfyUI with 50-75% VRAM savings!**
 
-This custom node pack enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
+This custom AIO node enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
 
 ---
 
@@ -119,6 +119,16 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 
 ## Performance Tips
 
+**Speed Optimization Hierarchy** (from Disty0's recommendations):
+1. **Triton + Quantized MatMul**: 30-80% faster than BF16/FP16 (enabled by default)
+2. **xFormers**: Additional 10-45% speedup (enable with `use_xformers=True`)
+3. **SDPA**: Always active (automatic PyTorch 2.0+ optimization)
+
+**Triton Installation**:
+- **Linux**: `pip install triton`
+- **Windows**: `pip install triton-windows` (native Windows support, no WSL needed!)
+- Triton is auto-detected; if unavailable, the node continues without it
+
 **For All Memory Modes**:
 - SDPA (Scaled Dot Product Attention) is always active - automatic PyTorch 2.0+ optimization
 - Enable `use_xformers=True` for 10-45% additional speedup (safe to try)
@@ -128,6 +138,22 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 - FLUX/SD3/Qwen/Z-Image: Use `FlowMatchEulerDiscreteScheduler`
 - SDXL/SD1.5: Use `DPMSolverMultistepScheduler`, `EulerDiscreteScheduler`, or `UniPCMultistepScheduler`
 - Wrong scheduler = broken images!
+
+**Advanced: torch.compile** (~30% speedup after first run, experimental):
+- Enable with `use_torch_compile=True` in the node
+- First run has 30-60 second compilation overhead (cached for subsequent runs)
+- Requires PyTorch 2.0+ and Triton (Linux) or triton-windows (Windows)
+- **⚠️ CONFLICTS with xFormers** - cannot use both together
+- **💡 Tip**: torch.compile + SDPA (default) is [18-20% faster than xFormers](https://huggingface.co/docs/diffusers/en/optimization/xformers) - consider using torch.compile instead of xFormers!
+
+---
+
+## Interrupt Support
+
+The node supports ComfyUI's interrupt mechanism:
+- Click "Cancel" in ComfyUI to stop generation mid-process
+- The node checks for interrupts at each denoising step
+- Partial results are discarded when interrupted
 
 ---
 
@@ -153,6 +179,9 @@ If you see "xFormers not available" but have it installed:
 ### Performance is Slow
 
 **Balanced/lowvram modes**: Inherently slower due to CPU↔GPU data movement. Options:
+- Install Triton for Quantized MatMul (30-80% speedup):
+  - Linux: `pip install triton`
+  - Windows: `pip install triton-windows`
 - Enable `use_xformers=True` (10-45% speedup if compatible)
 - SDPA is always active for automatic optimization
 - Upgrade to more VRAM for full GPU mode
@@ -171,6 +200,14 @@ If you see "xFormers not available" but have it installed:
 2. Verify repo ID is correct for custom models
 3. For local models, ensure path points to directory (not a file)
 4. Check model is actually SDNQ-quantized (from Disty0's collection)
+
+### torch.compile Issues
+
+If you see errors with `use_torch_compile=True`:
+1. **Disable xFormers** - they conflict and cannot be used together (torch.compile + SDPA is faster anyway!)
+2. **First run is slow** - 30-60s compilation is normal, cached after that
+3. **Compilation errors** - try disabling; it's experimental and not all models work
+4. **RTX 50xx users** - If a Windows user, then ensure you have at minimum triton-windows 3.3.0.post14 which [includes RTX 50xx support](https://github.com/woct0rdho/triton-windows/issues/62)
 
 ---
 

@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-sdnq"
 description = "ComfyUI custom node pack for loading SDNQ quantized models"
-version = "1.4.04"
+version = "1.4.08"
 license = {file = "LICENSE"}
 
 [project.urls]

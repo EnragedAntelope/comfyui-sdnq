@@ -35,12 +35,7 @@ def install():
 
         print("\n" + "="*60)
         print("[OK] ComfyUI-SDNQ installation complete!")
-        print("="*60)
-        print("\nNext steps:")
-        print("1. Restart ComfyUI")
-        print("2. Look for 'SDNQ Sampler' under sampling/SDNQ")
-        print("3. Browse models: https://huggingface.co/collections/Disty0/sdnq")
-        print("\n" + "="*60 + "\n")
+        print("="*60 + "\n")
 
         return True
 
