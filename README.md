@@ -4,8 +4,6 @@
 
 This custom node pack enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
 
-> **SDNQ is developed by [Disty0](https://github.com/Disty0)** - this node pack provides ComfyUI integration.
-
 ---
 
 ## Features
@@ -188,8 +186,6 @@ Contributions welcome! Please:
 ## License
 
 See [LICENSE](LICENSE) for details.
-
-This project integrates with [SDNQ by Disty0](https://github.com/Disty0/sdnq).
 
 ---
 
