@@ -143,9 +143,8 @@ Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https
 - Enable with `use_torch_compile=True` in the node
 - First run has 30-60 second compilation overhead (cached for subsequent runs)
 - Requires PyTorch 2.0+ and Triton (Linux) or triton-windows (Windows)
-- **⚠️ CONFLICTS with xFormers** - cannot use both together (auto-disabled if xFormers is on)
-- RTX 50xx (Blackwell) support may be limited - disable if you see errors
-- Performance with quantized models may vary
+- **⚠️ CONFLICTS with xFormers** - cannot use both together
+- **💡 Tip**: torch.compile + SDPA (default) is [18-20% faster than xFormers](https://huggingface.co/docs/diffusers/en/optimization/xformers) - consider using torch.compile instead of xFormers!
 
 ---
 
@@ -205,11 +204,10 @@ If you see "xFormers not available" but have it installed:
 ### torch.compile Issues
 
 If you see errors with `use_torch_compile=True`:
-1. **Disable xFormers** - they conflict and cannot be used together
-2. **RTX 50xx GPUs** - Blackwell support is still maturing, try disabling
-3. **First run is slow** - 30-60s compilation is normal, cached after that
-4. **Compilation errors** - try disabling; it's experimental and not all models work
-5. **No speedup** - quantized models may not benefit as much; SDPA is already active
+1. **Disable xFormers** - they conflict and cannot be used together (torch.compile + SDPA is faster anyway!)
+2. **First run is slow** - 30-60s compilation is normal, cached after that
+3. **Compilation errors** - try disabling; it's experimental and not all models work
+4. **RTX 50xx users** - ensure you have triton-windows 3.3.0.post14+ which [includes RTX 50xx support](https://github.com/woct0rdho/triton-windows/issues/62)
 
 ---
 

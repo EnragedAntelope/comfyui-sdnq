@@ -358,7 +358,7 @@ class SDNQSampler:
 
                 "use_torch_compile": ("BOOLEAN", {
                     "default": False,
-                    "tooltip": "EXPERIMENTAL: Compile transformer with torch.compile for ~30% speedup after first run. First run has 30-60s compilation overhead. Requires PyTorch 2.0+ and Triton. CONFLICTS with xFormers (cannot use both). RTX 50xx support may be limited."
+                    "tooltip": "EXPERIMENTAL: Compile transformer with torch.compile for ~30% speedup after first run. First run has 30-60s overhead (cached after). Requires PyTorch 2.0+ and Triton. CONFLICTS with xFormers - but torch.compile + SDPA (default) is actually faster than xFormers!"
                 }),
 
                 # ============================================================
@@ -682,12 +682,14 @@ class SDNQSampler:
 
             # Apply torch.compile optimization (EXPERIMENTAL)
             # Compiles transformer/unet for ~30% speedup after first run
+            # NOTE: torch.compile + SDPA (default) is faster than xFormers per HuggingFace docs
             # WARNING: Known conflicts with xFormers - they should not be used together
             if use_torch_compile:
                 # Check for xFormers conflict first
                 if use_xformers:
                     print("[SDNQ Sampler] ⚠️  torch.compile conflicts with xFormers - skipping compilation")
-                    print("[SDNQ Sampler] ℹ️  Disable xFormers to use torch.compile, or vice versa")
+                    print("[SDNQ Sampler] ℹ️  Tip: torch.compile + SDPA (default) is faster than xFormers alone")
+                    print("[SDNQ Sampler] ℹ️  Consider disabling xFormers to use torch.compile instead")
                 elif not torch.cuda.is_available():
                     print("[SDNQ Sampler] ℹ️  torch.compile requires CUDA. Skipping compilation.")
                 else:
@@ -701,17 +703,6 @@ class SDNQSampler:
                         if torch_version < (2, 0):
                             print(f"[SDNQ Sampler] ⚠️  torch.compile requires PyTorch 2.0+, got {torch.__version__}")
                         else:
-                            # Warn about quantized model performance
-                            print("[SDNQ Sampler] ℹ️  Note: torch.compile with quantized models may have variable performance")
-
-                            # Check GPU architecture (warn about very new GPUs)
-                            if torch.cuda.is_available():
-                                gpu_name = torch.cuda.get_device_name(0)
-                                # RTX 50xx series (Blackwell) may have issues
-                                if "5090" in gpu_name or "5080" in gpu_name or "5070" in gpu_name:
-                                    print(f"[SDNQ Sampler] ⚠️  {gpu_name} detected - torch.compile support may be limited")
-                                    print("[SDNQ Sampler] ℹ️  If you see errors, try disabling torch.compile")
-
                             # Compile transformer (FLUX, SD3)
                             if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
                                 pipeline.transformer = torch.compile(
