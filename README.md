@@ -2,7 +2,7 @@
 
 **Load and run SDNQ quantized models in ComfyUI with 50-75% VRAM savings!**
 
-This custom node pack enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
+This custom AIO node enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
 
 ---
 
@@ -207,7 +207,7 @@ If you see errors with `use_torch_compile=True`:
 1. **Disable xFormers** - they conflict and cannot be used together (torch.compile + SDPA is faster anyway!)
 2. **First run is slow** - 30-60s compilation is normal, cached after that
 3. **Compilation errors** - try disabling; it's experimental and not all models work
-4. **RTX 50xx users** - ensure you have triton-windows 3.3.0.post14+ which [includes RTX 50xx support](https://github.com/woct0rdho/triton-windows/issues/62)
+4. **RTX 50xx users** - If a Windows user, then ensure you have at minimum triton-windows 3.3.0.post14 which [includes RTX 50xx support](https://github.com/woct0rdho/triton-windows/issues/62)
 
 ---
 
