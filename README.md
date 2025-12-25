@@ -2,254 +2,69 @@
 
 **Load and run SDNQ quantized models in ComfyUI with 50-75% VRAM savings!**
 
-This custom AIO node enables running [SDNQ (SD.Next Quantization)](https://github.com/Disty0/sdnq) models directly in ComfyUI. Run large models like FLUX.2, FLUX.1, SD3.5, and more on consumer hardware with significantly reduced VRAM requirements while maintaining quality.
-<img width="2315" height="1121" alt="image" src="https://github.com/user-attachments/assets/4011ab36-e197-4543-8d7f-cf90ee4dee82" />
+Run large models like FLUX.2, FLUX.1, SD3.5, Qwen-Image, and more on consumer hardware with significantly reduced VRAM requirements.
 
----
+<img width="2315" height="1121" alt="image" src="https://github.com/user-attachments/assets/4011ab36-e197-4543-8d7f-cf90ee4dee82" />
 
 ## Features
 
-- **🎨 Standalone Sampler**: All-in-one node - load model, generate images, done
-- **📦 Model Catalog**: 20+ pre-configured SDNQ models with auto-download
-- **🖼️ Image Editing**: Optional image inputs for Qwen-Image-Edit, ChronoEdit, etc.
-- **💾 Smart Caching**: Download once, use forever
-- **🚀 VRAM Savings**: 50-75% memory reduction with quantization
-- **⚡ Performance Optimizations**: Optional xFormers, VAE tiling, SDPA (automatic)
-- **🎯 LoRA Support**: Load LoRAs from ComfyUI loras folder
-- **📅 Multi-Scheduler**: 14 schedulers (FLUX/SD3 flow-match + traditional diffusion)
-- **🔧 Memory Modes**: GPU (fastest), balanced (12-16GB VRAM), lowvram (8GB VRAM)
-
----
+- **All-in-one node** - Select model, enter prompt, generate
+- **20+ pre-configured models** with auto-download from HuggingFace
+- **50-75% VRAM savings** with SDNQ quantization
+- **Memory modes**: GPU (fastest), balanced (12-16GB), lowvram (8GB)
+- **LoRA support**, image editing, 14 schedulers
+- **Performance options**: xFormers, torch.compile, VAE tiling
 
 ## Installation
 
-### Method 1: ComfyUI Manager (Recommended)
+### ComfyUI Manager (Recommended)
+Search for "comfyui-sdnq" → Install → Restart ComfyUI
 
-1. Install [ComfyUI Manager](https://github.com/ltdrdata/ComfyUI-Manager)
-2. Search for "comfyui-sdnq" in the manager
-3. Click Install
-4. Restart ComfyUI
-
-### Method 2: Manual Installation
-
+### Manual
 ```bash
 cd ComfyUI/custom_nodes/
 git clone https://github.com/EnragedAntelope/comfyui-sdnq.git
-cd comfyui-sdnq
-pip install -r requirements.txt
+cd comfyui-sdnq && pip install -r requirements.txt
 ```
-
-Restart ComfyUI after installation.
-
-### Updating Diffusers (for latest models)
-
-Some newer SDNQ models (like FLUX.2, Z-Image-Turbo, Qwen-Image-Edit-2511) require the latest diffusers. If you encounter errors loading new models:
-
-```bash
-# Standard upgrade (recommended)
-pip install --upgrade diffusers
-
-# If diffusers doesn't yet support the model you're trying
-pip install --upgrade git+https://github.com/huggingface/diffusers.git
-```
-
----
 
 ## Quick Start
 
 1. Add **SDNQ Sampler** node (under `sampling/SDNQ`)
 2. Select a model from dropdown (auto-downloads on first use)
-3. Enter your prompt
-4. Click Queue Prompt
-5. Done! Image output connects directly to SaveImage
+3. Enter your prompt → Queue Prompt → Done!
 
-**Defaults are optimized** - select model, enter prompt, generate!
+**Hover over inputs for tooltips** - all parameters are documented in the UI.
 
----
+## Models
 
-## Node Reference
+20+ pre-quantized models available: FLUX, Qwen-Image, Z-Image, SD3, SDXL, and more.
 
-### SDNQ Sampler
+Browse all models: [Disty0's SDNQ Collection](https://huggingface.co/collections/Disty0/sdnq)
 
-**Category**: `sampling/SDNQ`
+## Performance
 
-**Main Parameters**:
-- `model_selection`: Dropdown with 20+ pre-configured models
-- `custom_model_path`: For local models or custom HuggingFace repos
-- `prompt` / `negative_prompt`: What to create / what to avoid
-- `steps`, `cfg`, `width`, `height`, `seed`: Standard generation controls
-- `scheduler`: FlowMatchEulerDiscreteScheduler (FLUX/SD3) or traditional samplers
-
-**Memory Management**:
-- `memory_mode`:
-  - `gpu` = Full GPU (fastest, 24GB+ VRAM required)
-  - `balanced` = CPU offloading (12-16GB VRAM)
-  - `lowvram` = Sequential offloading (8GB VRAM, slowest)
-- `dtype`: bfloat16 (recommended), float16, or float32
-
-**Performance Optimizations** (optional):
-- `use_xformers`: 10-45% speedup (safe to try, auto-fallback to SDPA)
-- `enable_vae_tiling`: For large images >1536px (prevents OOM)
-- SDPA (Scaled Dot Product Attention): Always active - automatic PyTorch 2.0+ optimization
-
-**LoRA Support**:
-- `lora_selection`: Dropdown from ComfyUI loras folder
-- `lora_custom_path`: Custom LoRA path or HuggingFace repo
-- `lora_strength`: -5.0 to +5.0 (1.0 = full strength)
-
-**Image Editing** (optional - connect LoadImage node):
-- `image1`, `image2`, `image3`, `image4`: Source images for editing (Qwen-Image-Edit, ChronoEdit, etc.)
-- `image_resize`: Auto-resize inputs (512px-1536px options)
-
-**Outputs**: `IMAGE` (connects to SaveImage, Preview, etc.)
-
----
-
-## Available Models
-
-20+ pre-configured models including:
-- **FLUX**: FLUX.1-dev, FLUX.1-schnell, FLUX.2-dev, FLUX.1-Krea, FLUX.1-Kontext
-- **Qwen**: Qwen-Image variants (Edit, Lightning, Turbo)
-- **Z-Image**: Z-Image-Turbo (int8 and uint4 variants) - Fast T2I
-- **SD3/SDXL**: SD3-Medium, SD3.5-Large, NoobAI-XL variants
-- **Others**: Chroma1-HD, HunyuanImage3, ChronoEdit, Wan2.2 Video models
-
-Most available in uint4 (max VRAM savings) or int8 (best quality). Browse: https://huggingface.co/collections/Disty0/sdnq
-
----
-
-## Performance Tips
-
-**Speed Optimization Hierarchy** (from Disty0's recommendations):
-1. **Triton + Quantized MatMul**: 30-80% faster than BF16/FP16 (enabled by default)
-2. **xFormers**: Additional 10-45% speedup (enable with `use_xformers=True`)
-3. **SDPA**: Always active (automatic PyTorch 2.0+ optimization)
-
-**Triton Installation**:
+For best speed, install Triton:
 - **Linux**: `pip install triton`
-- **Windows**: `pip install triton-windows` (native Windows support, no WSL needed!)
-- Triton is auto-detected; if unavailable, the node continues without it
+- **Windows**: `pip install triton-windows`
 
-**For All Memory Modes**:
-- SDPA (Scaled Dot Product Attention) is always active - automatic PyTorch 2.0+ optimization
-- Enable `use_xformers=True` for 10-45% additional speedup (safe to try)
-- Use `enable_vae_tiling=True` for large images (>1536px) to prevent OOM
-
-**Scheduler Selection**:
-- FLUX/SD3/Qwen/Z-Image: Use `FlowMatchEulerDiscreteScheduler`
-- SDXL/SD1.5: Use `DPMSolverMultistepScheduler`, `EulerDiscreteScheduler`, or `UniPCMultistepScheduler`
-- Wrong scheduler = broken images!
-
-**Advanced: torch.compile** (~30% speedup after first run, experimental):
-- Enable with `use_torch_compile=True` in the node
-- First run has 30-60 second compilation overhead (cached for subsequent runs)
-- Requires PyTorch 2.0+ and Triton (Linux) or triton-windows (Windows)
-- **⚠️ CONFLICTS with xFormers** - cannot use both together
-- **💡 Tip**: torch.compile + SDPA (default) is [18-20% faster than xFormers](https://huggingface.co/docs/diffusers/en/optimization/xformers) - consider using torch.compile instead of xFormers!
-
----
-
-## Interrupt Support
-
-The node supports ComfyUI's interrupt mechanism:
-- Click "Cancel" in ComfyUI to stop generation mid-process
-- The node checks for interrupts at each denoising step
-- Partial results are discarded when interrupted
-
----
-
-## Model Storage
-
-Downloaded models are stored in:
-- **Location**: `ComfyUI/models/diffusers/sdnq/`
-- **Format**: Standard diffusers format
-
-Models are cached automatically - download once, use forever!
-
----
+**Scheduler tip**: Use `FlowMatchEulerDiscreteScheduler` for FLUX/SD3/Qwen. Use `DPMSolverMultistepScheduler` for SDXL/SD1.5.
 
 ## Troubleshooting
 
-### xFormers Not Working
-
-If you see "xFormers not available" but have it installed:
-- This is usually fine - the node automatically falls back to SDPA (PyTorch 2.0+ default)
-- SDPA provides good performance without xFormers
-- If xFormers is incompatible with your GPU/model, fallback is automatic
-
-### Performance is Slow
-
-**Balanced/lowvram modes**: Inherently slower due to CPU↔GPU data movement. Options:
-- Install Triton for Quantized MatMul (30-80% speedup):
-  - Linux: `pip install triton`
-  - Windows: `pip install triton-windows`
-- Enable `use_xformers=True` (10-45% speedup if compatible)
-- SDPA is always active for automatic optimization
-- Upgrade to more VRAM for full GPU mode
-- Use smaller model (uint4 vs int8)
-
-### Out of Memory
-
-1. Use lower memory mode (gpu → balanced → lowvram)
-2. Use more aggressive quantization (uint4 instead of int8)
-3. Reduce resolution or batch size
-4. Enable `enable_vae_tiling=True` for large images
-
-### Model Loading Fails
-
-1. Check internet connection (for auto-download)
-2. Verify repo ID is correct for custom models
-3. For local models, ensure path points to directory (not a file)
-4. Check model is actually SDNQ-quantized (from Disty0's collection)
-
-### torch.compile Issues
-
-If you see errors with `use_torch_compile=True`:
-1. **Disable xFormers** - they conflict and cannot be used together (torch.compile + SDPA is faster anyway!)
-2. **First run is slow** - 30-60s compilation is normal, cached after that
-3. **Compilation errors** - try disabling; it's experimental and not all models work
-4. **RTX 50xx users** - If a Windows user, then ensure you have at minimum triton-windows 3.3.0.post14 which [includes RTX 50xx support](https://github.com/woct0rdho/triton-windows/issues/62)
-
-**Note**: `use_torch_compile` is in the "optional" section of the node - you may need to expand/scroll to see it in ComfyUI's UI.
-
-### Qwen/VL Model Config Errors
-
-If you see errors like `'Qwen2_5_VLConfig' object has no attribute 'vision_start_token_id'`:
-
-This is a **transformers version compatibility issue**. Qwen and vision-language models require recent versions.
-
-**Fix**:
+**Model loading errors** → Update libraries:
 ```bash
-# Standard upgrade
 pip install --upgrade transformers diffusers
-
-# If standard upgrade doesn't work, install from source
-pip install git+https://github.com/huggingface/transformers.git
-pip install git+https://github.com/huggingface/diffusers.git
 ```
 
----
+**Out of memory** → Try `balanced` or `lowvram` memory mode, or use uint4 models.
 
-## Contributing
+**torch.compile crashes** → Disable it. Experimental feature, especially on Windows.
 
-Contributions welcome! Please:
-1. Follow existing code style
-2. Test with multiple model types
-3. Update documentation for new features
-
----
-
-## License
-
-See [LICENSE](LICENSE) for details.
-
----
+**Slow performance** → Install Triton (see above), or try `use_xformers=True`.
 
 ## Credits
 
-### SDNQ - SD.Next Quantization Engine
-- **Author**: Disty0
-- **Repository**: https://github.com/Disty0/sdnq
-- **Pre-quantized models**: https://huggingface.co/collections/Disty0/sdnq
+**SDNQ by [Disty0](https://github.com/Disty0/sdnq)** - All quantization technology is developed and maintained by Disty0.
 
-This node pack provides ComfyUI integration for SDNQ. All quantization technology is developed and maintained by Disty0.
+- [SDNQ Repository](https://github.com/Disty0/sdnq)
+- [Pre-quantized Models](https://huggingface.co/collections/Disty0/sdnq)

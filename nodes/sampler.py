@@ -680,50 +680,8 @@ class SDNQSampler:
             else:
                 print("[SDNQ Sampler] Quantized MatMul optimization disabled.")
 
-            # Apply torch.compile optimization (EXPERIMENTAL)
-            # Compiles transformer/unet for ~30% speedup after first run
-            # NOTE: torch.compile + SDPA (default) is faster than xFormers per HuggingFace docs
-            # WARNING: Known conflicts with xFormers - they should not be used together
-            if use_torch_compile:
-                # Check for xFormers conflict first
-                if use_xformers:
-                    print("[SDNQ Sampler] ⚠️  torch.compile conflicts with xFormers - skipping compilation")
-                    print("[SDNQ Sampler] ℹ️  Tip: torch.compile + SDPA (default) is faster than xFormers alone")
-                    print("[SDNQ Sampler] ℹ️  Consider disabling xFormers to use torch.compile instead")
-                elif not torch.cuda.is_available():
-                    print("[SDNQ Sampler] ℹ️  torch.compile requires CUDA. Skipping compilation.")
-                else:
-                    print("[SDNQ Sampler] Applying torch.compile (EXPERIMENTAL)...")
-                    print("[SDNQ Sampler] ⚠️  First run will be slow (30-60s compilation overhead)")
-
-                    # Check for potential issues
-                    try:
-                        # Check PyTorch version
-                        torch_version = tuple(int(x) for x in torch.__version__.split('.')[:2])
-                        if torch_version < (2, 0):
-                            print(f"[SDNQ Sampler] ⚠️  torch.compile requires PyTorch 2.0+, got {torch.__version__}")
-                        else:
-                            # Compile transformer (FLUX, SD3)
-                            if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
-                                pipeline.transformer = torch.compile(
-                                    pipeline.transformer,
-                                    backend="inductor",
-                                    mode="max-autotune"
-                                )
-                                print("[SDNQ Sampler] ✓ torch.compile applied to transformer")
-
-                            # Compile UNet (SDXL, SD1.5)
-                            if hasattr(pipeline, 'unet') and pipeline.unet is not None:
-                                pipeline.unet = torch.compile(
-                                    pipeline.unet,
-                                    backend="inductor",
-                                    mode="max-autotune"
-                                )
-                                print("[SDNQ Sampler] ✓ torch.compile applied to UNet")
-
-                    except Exception as e:
-                        print(f"[SDNQ Sampler] ⚠️  torch.compile failed: {e}")
-                        print("[SDNQ Sampler] This is experimental - continuing without compilation")
+            # NOTE: torch.compile is applied AFTER model is on GPU (see below)
+            # This avoids crashes on Windows with triton-windows during .to("cuda")
 
             # CRITICAL: Apply xFormers BEFORE memory management
             # xFormers must be enabled before CPU offloading is set up
@@ -801,6 +759,65 @@ class SDNQSampler:
                     print("[SDNQ Sampler] ✓ VAE tiling enabled")
                 except Exception as e:
                     print(f"[SDNQ Sampler] ⚠️  VAE tiling failed: {e}")
+
+            # Apply torch.compile optimization (EXPERIMENTAL)
+            # IMPORTANT: Applied AFTER model is on GPU to avoid crashes on Windows
+            # with triton-windows during .to("cuda") operations
+            # Compiles transformer/unet for ~30% speedup after first run
+            # NOTE: torch.compile + SDPA (default) is faster than xFormers per HuggingFace docs
+            if use_torch_compile:
+                # Check for xFormers conflict first
+                if use_xformers:
+                    print("[SDNQ Sampler] ⚠️  torch.compile conflicts with xFormers - skipping")
+                    print("[SDNQ Sampler] ℹ️  Tip: torch.compile + SDPA is faster than xFormers")
+                elif not torch.cuda.is_available():
+                    print("[SDNQ Sampler] ℹ️  torch.compile requires CUDA. Skipping.")
+                elif memory_mode != "gpu":
+                    # torch.compile works best with full GPU mode
+                    print("[SDNQ Sampler] ℹ️  torch.compile works best with memory_mode='gpu'")
+                    print("[SDNQ Sampler] ℹ️  Skipping compilation for balanced/lowvram modes")
+                else:
+                    print("[SDNQ Sampler] Applying torch.compile (EXPERIMENTAL)...")
+                    print("[SDNQ Sampler] ⚠️  First run will be slow (30-60s compilation)")
+
+                    # Platform warnings
+                    if sys.platform == "win32":
+                        py_version = sys.version_info
+                        if py_version >= (3, 13):
+                            print(f"[SDNQ Sampler] ⚠️  Python {py_version.major}.{py_version.minor} + Windows + torch.compile is experimental")
+                            print("[SDNQ Sampler] ⚠️  If crashes occur, disable torch.compile")
+
+                    try:
+                        # Check PyTorch version
+                        torch_version = tuple(int(x) for x in torch.__version__.split('.')[:2])
+                        if torch_version < (2, 0):
+                            print(f"[SDNQ Sampler] ⚠️  torch.compile requires PyTorch 2.0+, got {torch.__version__}")
+                        else:
+                            # Use 'reduce-overhead' mode for better stability
+                            # 'max-autotune' can cause issues on some configurations
+                            compile_mode = "reduce-overhead"
+
+                            # Compile transformer (FLUX, SD3)
+                            if hasattr(pipeline, 'transformer') and pipeline.transformer is not None:
+                                pipeline.transformer = torch.compile(
+                                    pipeline.transformer,
+                                    backend="inductor",
+                                    mode=compile_mode
+                                )
+                                print("[SDNQ Sampler] ✓ torch.compile applied to transformer")
+
+                            # Compile UNet (SDXL, SD1.5)
+                            if hasattr(pipeline, 'unet') and pipeline.unet is not None:
+                                pipeline.unet = torch.compile(
+                                    pipeline.unet,
+                                    backend="inductor",
+                                    mode=compile_mode
+                                )
+                                print("[SDNQ Sampler] ✓ torch.compile applied to UNet")
+
+                    except Exception as e:
+                        print(f"[SDNQ Sampler] ⚠️  torch.compile failed: {e}")
+                        print("[SDNQ Sampler] Continuing without compilation")
 
             return pipeline
 
