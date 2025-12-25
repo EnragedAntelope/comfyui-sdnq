@@ -210,6 +210,24 @@ If you see errors with `use_torch_compile=True`:
 3. **Compilation errors** - try disabling; it's experimental and not all models work
 4. **RTX 50xx users** - If a Windows user, then ensure you have at minimum triton-windows 3.3.0.post14 which [includes RTX 50xx support](https://github.com/woct0rdho/triton-windows/issues/62)
 
+**Note**: `use_torch_compile` is in the "optional" section of the node - you may need to expand/scroll to see it in ComfyUI's UI.
+
+### Qwen/VL Model Config Errors
+
+If you see errors like `'Qwen2_5_VLConfig' object has no attribute 'vision_start_token_id'`:
+
+This is a **transformers version compatibility issue**. Qwen and vision-language models require recent versions.
+
+**Fix**:
+```bash
+# Standard upgrade
+pip install --upgrade transformers diffusers
+
+# If standard upgrade doesn't work, install from source
+pip install git+https://github.com/huggingface/transformers.git
+pip install git+https://github.com/huggingface/diffusers.git
+```
+
 ---
 
 ## Contributing
