@@ -13,7 +13,7 @@ Run large models like FLUX.2, FLUX.1, SD3.5, Qwen-Image, and more on consumer ha
 - **50-75% VRAM savings** with SDNQ quantization
 - **Memory modes**: GPU (fastest), balanced (12-16GB), lowvram (8GB)
 - **LoRA support**, image editing, 14 schedulers
-- **Performance options**: xFormers, torch.compile, VAE tiling
+- **Performance options**: Triton acceleration, xFormers, VAE tiling
 
 ## Installation
 
@@ -43,9 +43,11 @@ Browse all models: [Disty0's SDNQ Collection](https://huggingface.co/collections
 
 ## Performance
 
-For best speed, install Triton:
+For best speed (30-80% faster), install Triton:
 - **Linux**: `pip install triton`
 - **Windows**: `pip install triton-windows`
+
+Triton enables optimized quantized matmul operations. Enabled by default when available.
 
 **Scheduler tip**: Use `FlowMatchEulerDiscreteScheduler` for FLUX/SD3/Qwen. Use `DPMSolverMultistepScheduler` for SDXL/SD1.5.
 
@@ -57,8 +59,6 @@ pip install --upgrade transformers diffusers
 ```
 
 **Out of memory** → Try `balanced` or `lowvram` memory mode, or use uint4 models.
-
-**torch.compile crashes** → Disable it. Experimental feature, especially on Windows.
 
 **Slow performance** → Install Triton (see above), or try `use_xformers=True`.
 
