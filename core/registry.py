@@ -110,13 +110,9 @@ SDNQ_MODEL_CATALOG = {
         "description": "Qwen-Image-Edit 4-bit SVD - Image-to-Image",
         "priority": 13
     },
-    "Qwen3-VL-32B-Instruct-SDNQ-uint4": {
-        "repo_id": "Disty0/Qwen3-VL-32B-Instruct-SDNQ-uint4-svd-r32",
-        "type": "Qwen",
-        "quant_level": "uint4",
-        "description": "Qwen3-VL-32B 4-bit SVD - Image-to-Text (18B params)",
-        "priority": 14
-    },
+    # NOTE: Qwen3-VL-32B-Instruct is a VLM (Vision-Language Model) that outputs TEXT, not images.
+    # It requires transformers library, not diffusers, and needs a separate node implementation.
+    # See docs/VLM_SUPPORT_NOTES.md for implementation details if VLM support is added later.
 
     # Z-Image Models - Latest addition (2025)
     "Z-Image-Turbo-SDNQ-int8": {

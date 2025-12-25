@@ -383,8 +383,8 @@ class SDNQSampler:
         }
 
     # V3 API: Return type hints
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("image",)
+    RETURN_TYPES = ("IMAGE", "LATENT")
+    RETURN_NAMES = ("image", "latent")
 
     # V1 API: Function name
     FUNCTION = "generate"
@@ -960,7 +960,7 @@ class SDNQSampler:
 
     def generate_image(self, pipeline, prompt: str, negative_prompt: str,
                       steps: int, cfg: float, width: int, height: int, seed: int,
-                      source_images: Optional[list] = None) -> Image.Image:
+                      source_images: Optional[list] = None) -> Tuple[Image.Image, Optional[torch.Tensor]]:
         """
         Generate image using the loaded pipeline.
 
@@ -976,7 +976,9 @@ class SDNQSampler:
             source_images: Optional list of PIL Images for image editing (Qwen-Image-Edit, etc.)
 
         Returns:
-            PIL Image object
+            Tuple of (PIL Image, latents tensor or None)
+            - Image: The generated/decoded image
+            - Latents: Raw latent tensor before VAE decode (for optional output)
 
         Raises:
             Exception: If generation fails or is interrupted
@@ -1016,12 +1018,14 @@ class SDNQSampler:
             # Build pipeline call kwargs
             # Only include parameters that are supported by the specific pipeline
             # Different pipelines have different signatures (FLUX.2 doesn't accept negative_prompt)
+            # We request latent output so we can return both image and latents
             pipeline_kwargs = {
                 "prompt": prompt,
                 "num_inference_steps": steps,
                 "guidance_scale": cfg,
                 "generator": generator,
                 "callback_on_step_end": self._create_interrupt_callback(),
+                "output_type": "latent",  # Request latent output - we'll manually decode
             }
 
             # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
@@ -1088,6 +1092,13 @@ class SDNQSampler:
                     pipeline_kwargs["height"] = height
                     result = pipeline(**pipeline_kwargs)
 
+                # Handle 'output_type' not supported - fallback to default (no latent capture)
+                elif param_name == "output_type":
+                    print(f"[SDNQ Sampler] ℹ️  Pipeline {type(pipeline).__name__} doesn't support output_type - latent output unavailable")
+                    if "output_type" in pipeline_kwargs:
+                        del pipeline_kwargs["output_type"]
+                    result = pipeline(**pipeline_kwargs)
+
                 else:
                     # Different TypeError - re-raise with helpful message
                     raise Exception(
@@ -1148,19 +1159,76 @@ class SDNQSampler:
             if self.check_interrupted():
                 raise InterruptedError("Generation interrupted by user")
 
-            # Check if result has images (may be empty if interrupted)
-            if not hasattr(result, 'images') or not result.images:
+            # Check if result has images/latents (may be empty if interrupted)
+            if not hasattr(result, 'images') or result.images is None:
                 if self.check_interrupted():
                     raise InterruptedError("Generation interrupted by user")
-                raise RuntimeError("Pipeline returned no images - generation may have failed silently")
+                raise RuntimeError("Pipeline returned no output - generation may have failed silently")
 
-            # Extract first image from results
-            # result.images[0] is a PIL.Image.Image object
-            image = result.images[0]
+            # With output_type="latent", result.images contains latent tensors
+            # We need to manually decode them using the VAE
+            latents = None
+            image = None
 
-            print(f"[SDNQ Sampler] Image generated! Size: {image.size}")
+            # Check if we got latents (tensor) or images (PIL)
+            first_output = result.images[0] if isinstance(result.images, list) else result.images
 
-            return image
+            if isinstance(first_output, torch.Tensor):
+                # We got latents - store them and decode to image
+                latents = first_output
+                if latents.dim() == 3:
+                    # Add batch dimension if missing: [C, H, W] -> [1, C, H, W]
+                    latents = latents.unsqueeze(0)
+
+                print(f"[SDNQ Sampler] Latents captured: shape={latents.shape}")
+
+                # Manually decode latents using VAE
+                if hasattr(pipeline, 'vae') and pipeline.vae is not None:
+                    print(f"[SDNQ Sampler] Decoding latents with VAE...")
+                    try:
+                        # Get scaling factor (different for different VAEs)
+                        scaling_factor = getattr(pipeline.vae.config, 'scaling_factor', 0.18215)
+
+                        # Decode latents: scale back and decode
+                        with torch.no_grad():
+                            decoded = pipeline.vae.decode(
+                                latents / scaling_factor,
+                                return_dict=False
+                            )[0]
+
+                        # Convert to PIL image
+                        # decoded is [B, C, H, W] in range [-1, 1] or [0, 1]
+                        decoded = decoded.squeeze(0)  # Remove batch dim: [C, H, W]
+                        decoded = (decoded / 2 + 0.5).clamp(0, 1)  # Scale to [0, 1]
+                        decoded = decoded.permute(1, 2, 0)  # [H, W, C]
+                        decoded = (decoded * 255).to(torch.uint8).cpu().numpy()
+                        image = Image.fromarray(decoded)
+
+                        print(f"[SDNQ Sampler] Image decoded! Size: {image.size}")
+                    except Exception as e:
+                        print(f"[SDNQ Sampler] ⚠️  VAE decode failed: {e}")
+                        print(f"[SDNQ Sampler] Falling back to re-run without latent output...")
+                        # Fall back to running without latent output
+                        if "output_type" in pipeline_kwargs:
+                            del pipeline_kwargs["output_type"]
+                        result = pipeline(**pipeline_kwargs)
+                        image = result.images[0]
+                        latents = None
+                else:
+                    print(f"[SDNQ Sampler] ⚠️  No VAE available for decoding")
+                    # Fall back to running without latent output
+                    if "output_type" in pipeline_kwargs:
+                        del pipeline_kwargs["output_type"]
+                    result = pipeline(**pipeline_kwargs)
+                    image = result.images[0]
+                    latents = None
+            else:
+                # We got a PIL image directly (output_type wasn't supported)
+                image = first_output
+                print(f"[SDNQ Sampler] Image generated! Size: {image.size}")
+                print(f"[SDNQ Sampler] ℹ️  Latent output not available for this pipeline")
+
+            return image, latents
 
         except InterruptedError:
             raise
@@ -1283,7 +1351,10 @@ class SDNQSampler:
             image_resize: Resize option for input images
 
         Returns:
-            Tuple containing (IMAGE,) in ComfyUI format
+            Tuple containing (IMAGE, LATENT) in ComfyUI format:
+            - IMAGE: Generated image as tensor [1, H, W, 3]
+            - LATENT: Dict with "samples" key containing latent tensor [1, C, H, W]
+                      If latent output unavailable, contains placeholder zeros
 
         Raises:
             ValueError: For invalid inputs
@@ -1410,8 +1481,8 @@ class SDNQSampler:
                         source_images.append(pil_img)
                         print(f"[SDNQ Sampler] Added source image {idx}: {pil_img.size}")
 
-            # Step 4: Generate image
-            pil_image = self.generate_image(
+            # Step 4: Generate image (returns both image and latents)
+            pil_image, latents = self.generate_image(
                 self.pipeline,
                 prompt,
                 negative_prompt,
@@ -1426,12 +1497,24 @@ class SDNQSampler:
             # Step 5: Convert to ComfyUI format
             comfy_tensor = self.pil_to_comfy_tensor(pil_image)
 
+            # Step 6: Convert latents to ComfyUI LATENT format
+            # ComfyUI LATENT is a dict with "samples" key containing tensor [B, C, H, W]
+            if latents is not None:
+                # Ensure latents are on CPU for ComfyUI compatibility
+                latent_dict = {"samples": latents.cpu()}
+                print(f"[SDNQ Sampler] Latent output ready: shape={latents.shape}")
+            else:
+                # Return empty latent if not available
+                # Create a minimal placeholder that won't cause errors if connected
+                latent_dict = {"samples": torch.zeros(1, 4, 64, 64)}
+                print(f"[SDNQ Sampler] ℹ️  Latent output not available (using placeholder)")
+
             print(f"\n{'='*60}")
             print(f"[SDNQ Sampler] Generation complete!")
             print(f"{'='*60}\n")
 
-            # Return as tuple (ComfyUI expects tuple of outputs)
-            return (comfy_tensor,)
+            # Return as tuple (ComfyUI expects tuple of outputs matching RETURN_TYPES)
+            return (comfy_tensor, latent_dict)
 
         except InterruptedError as e:
             print(f"\n{'='*60}")
