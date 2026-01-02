@@ -1018,15 +1018,26 @@ class SDNQSampler:
             # Build pipeline call kwargs
             # Only include parameters that are supported by the specific pipeline
             # Different pipelines have different signatures (FLUX.2 doesn't accept negative_prompt)
-            # We request latent output so we can return both image and latents
+
+            # Check if this is a Flux pipeline - Flux models have incompatible latent formats
+            # that cause VAE decode errors (channel mismatch). Skip latent output for these.
+            # See: https://github.com/EnragedAntelope/comfyui-sdnq/issues/54
+            is_flux_pipeline = "Flux" in pipeline_name
+
             pipeline_kwargs = {
                 "prompt": prompt,
                 "num_inference_steps": steps,
                 "guidance_scale": cfg,
                 "generator": generator,
                 "callback_on_step_end": self._create_interrupt_callback(),
-                "output_type": "latent",  # Request latent output - we'll manually decode
             }
+
+            # Only request latent output for non-Flux pipelines
+            # Flux models have latents in a format incompatible with standard VAE decoding
+            if not is_flux_pipeline:
+                pipeline_kwargs["output_type"] = "latent"  # Request latent output - we'll manually decode
+            else:
+                print(f"[SDNQ Sampler] ℹ️  Flux pipeline detected - using direct image output (latent output not compatible)")
 
             # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
             # If source_images provided, this is img2img - don't set width/height (use source size)
