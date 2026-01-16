@@ -12,7 +12,16 @@ from pathlib import Path
 
 # Catalog of pre-quantized SDNQ models from Disty0's HuggingFace collection
 # All entries verified against https://huggingface.co/collections/Disty0/sdnq
-# Last updated: 2025-12-23
+# Last updated: 2026-01-15
+#
+# Model Types:
+#   - FLUX, FLUX2: FLUX.1 and FLUX.2 text-to-image models
+#   - Qwen: Qwen-Image text-to-image and image editing models
+#   - Z-Image: Z-Image-Turbo fast generation models
+#   - GLM: GLM-Image text-to-image models
+#   - LTX2: LTX-2 video generation models (experimental)
+#   - Wan: Wanx video generation models
+#   - Chroma, Chrono, Hunyuan, SDXL: Other architectures
 SDNQ_MODEL_CATALOG = {
     # FLUX.1 Models - Original FLUX with older qint naming
     "FLUX.1-dev-qint8": {
@@ -183,6 +192,73 @@ SDNQ_MODEL_CATALOG = {
         "quant_level": "uint4",
         "description": "Wan2.2-T2V-A14B 4-bit SVD - Text-to-Video",
         "priority": 23
+    },
+
+    # FLUX.2-klein Models - Smaller FLUX.2 variants (requires diffusers from source)
+    "FLUX.2-klein-4B-SDNQ-4bit": {
+        "repo_id": "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
+        "type": "FLUX2",
+        "quant_level": "4bit",
+        "description": "FLUX.2-klein 4B 4-bit dynamic - Smaller FLUX.2 variant",
+        "priority": 24
+    },
+    "FLUX.2-klein-9B-SDNQ-4bit": {
+        "repo_id": "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32",
+        "type": "FLUX2",
+        "quant_level": "4bit",
+        "description": "FLUX.2-klein 9B 4-bit SVD - Larger FLUX.2-klein with SVD",
+        "priority": 25
+    },
+
+    # GLM-Image Models - Text-to-Image (requires diffusers from source)
+    "GLM-Image-SDNQ-4bit": {
+        "repo_id": "Disty0/GLM-Image-SDNQ-4bit-dynamic",
+        "type": "GLM",
+        "quant_level": "4bit",
+        "description": "GLM-Image 4-bit dynamic - Text-to-Image",
+        "priority": 26
+    },
+
+    # Qwen-Image-2512 Models - December 2025 update with improved quality
+    "Qwen-Image-2512-SDNQ-4bit": {
+        "repo_id": "Disty0/Qwen-Image-2512-SDNQ-4bit-dynamic",
+        "type": "Qwen",
+        "quant_level": "4bit",
+        "description": "Qwen-Image-2512 4-bit dynamic - Dec 2025 update, improved quality",
+        "priority": 27
+    },
+    "Qwen-Image-2512-SDNQ-uint4": {
+        "repo_id": "Disty0/Qwen-Image-2512-SDNQ-uint4-svd-r32",
+        "type": "Qwen",
+        "quant_level": "uint4",
+        "description": "Qwen-Image-2512 4-bit SVD - Dec 2025 update with SVD",
+        "priority": 28
+    },
+
+    # Qwen-Image-Layered - Layered image editing
+    "Qwen-Image-Layered-SDNQ-uint4": {
+        "repo_id": "Disty0/Qwen-Image-Layered-SDNQ-uint4-svd-r32",
+        "type": "Qwen",
+        "quant_level": "uint4",
+        "description": "Qwen-Image-Layered 4-bit SVD - Layered image editing",
+        "priority": 29
+    },
+
+    # LTX-2 Video Models - Text-to-Video and Image-to-Video
+    # These require video output handling - experimental support
+    "LTX-2-SDNQ-4bit": {
+        "repo_id": "Disty0/LTX-2-SDNQ-4bit-dynamic",
+        "type": "LTX2",
+        "quant_level": "4bit",
+        "description": "LTX-2 4-bit dynamic - Video generation (experimental)",
+        "priority": 30
+    },
+    "LTX-2-SDNQ-8bit": {
+        "repo_id": "Disty0/LTX-2-SDNQ-8bit-dynamic",
+        "type": "LTX2",
+        "quant_level": "int8",
+        "description": "LTX-2 8-bit dynamic - Video generation, better quality (experimental)",
+        "priority": 31
     },
 }
 

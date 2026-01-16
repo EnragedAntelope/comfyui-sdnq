@@ -163,6 +163,8 @@ class SDNQSampler:
         self.current_enable_vae_tiling = None
         self.current_use_quantized_matmul = None
         self.interrupted = False
+        # Video frame cache (for video models like LTX-2)
+        self._video_frames = None
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -378,6 +380,18 @@ class SDNQSampler:
                 "image_resize": (["No Resize", "Small (512px)", "Medium (768px)", "Large (1024px)", "XL (1536px)"], {
                     "default": "No Resize",
                     "tooltip": "Resize input images before processing. Smaller = faster inference, less VRAM. 'No Resize' keeps original dimensions."
+                }),
+
+                # ============================================================
+                # VIDEO GENERATION (For LTX-2 and other video models)
+                # ============================================================
+
+                "num_frames": ("INT", {
+                    "default": 1,
+                    "min": 1,
+                    "max": 257,
+                    "step": 8,
+                    "tooltip": "Number of frames for video models (LTX-2, Wan). Set to 1 for image models. Video models: 161 frames ~= 6 sec at 25fps. Must be divisible by 8+1 for some models."
                 }),
             }
         }
@@ -960,9 +974,10 @@ class SDNQSampler:
 
     def generate_image(self, pipeline, prompt: str, negative_prompt: str,
                       steps: int, cfg: float, width: int, height: int, seed: int,
-                      source_images: Optional[list] = None) -> Tuple[Image.Image, Optional[torch.Tensor]]:
+                      source_images: Optional[list] = None,
+                      num_frames: int = 1) -> Tuple[Image.Image, Optional[torch.Tensor]]:
         """
-        Generate image using the loaded pipeline.
+        Generate image or video using the loaded pipeline.
 
         Args:
             pipeline: Loaded diffusers pipeline
@@ -974,10 +989,11 @@ class SDNQSampler:
             height: Image height (must be multiple of 8)
             seed: Random seed for reproducibility
             source_images: Optional list of PIL Images for image editing (Qwen-Image-Edit, etc.)
+            num_frames: Number of frames for video generation (1 = image, >1 = video)
 
         Returns:
-            Tuple of (PIL Image, latents tensor or None)
-            - Image: The generated/decoded image
+            Tuple of (PIL Image or list of PIL Images, latents tensor or None)
+            - Image: The generated/decoded image (or first frame for video)
             - Latents: Raw latent tensor before VAE decode (for optional output)
 
         Raises:
@@ -985,23 +1001,31 @@ class SDNQSampler:
 
         Based on verified API from FLUX examples:
         https://huggingface.co/docs/diffusers/main/api/pipelines/flux
+        https://huggingface.co/docs/diffusers/main/api/pipelines/ltx_video
         """
         is_img2img = source_images and len(source_images) > 0
         pipeline_name = type(pipeline).__name__
         is_qwen_pipeline = "Qwen" in pipeline_name or "Edit" in pipeline_name
 
-        if is_img2img:
+        # Detect video pipelines (LTX, Wan, etc.)
+        is_video_pipeline = any(name in pipeline_name for name in ["LTX", "Video", "Wan"])
+
+        if is_video_pipeline:
+            mode = "video generation"
+        elif is_img2img:
             mode = "image-to-image"
         elif is_qwen_pipeline:
             mode = "text-to-image (blank canvas)"
         else:
             mode = "text-to-image"
 
-        print(f"[SDNQ Sampler] Generating image ({mode})...")
+        print(f"[SDNQ Sampler] Generating ({mode})...")
         print(f"[SDNQ Sampler]   Pipeline: {pipeline_name}")
         print(f"[SDNQ Sampler]   Prompt: {prompt[:100]}{'...' if len(prompt) > 100 else ''}")
         print(f"[SDNQ Sampler]   Steps: {steps}, CFG: {cfg}")
         print(f"[SDNQ Sampler]   Size: {width}x{height}")
+        if is_video_pipeline:
+            print(f"[SDNQ Sampler]   Frames: {num_frames}")
         print(f"[SDNQ Sampler]   Seed: {seed}")
         if is_img2img:
             print(f"[SDNQ Sampler]   Source images: {len(source_images)}")
@@ -1032,9 +1056,14 @@ class SDNQSampler:
                 "callback_on_step_end": self._create_interrupt_callback(),
             }
 
-            # Only request latent output for non-Flux pipelines
+            # Video pipelines need num_frames parameter
+            if is_video_pipeline and num_frames > 1:
+                pipeline_kwargs["num_frames"] = num_frames
+                # LTX-2 video models work best with direct PIL output
+                print(f"[SDNQ Sampler] ℹ️  Video pipeline detected - using PIL output for video frames")
+            # Only request latent output for non-Flux and non-video pipelines
             # Flux models have latents in a format incompatible with standard VAE decoding
-            if not is_flux_pipeline:
+            elif not is_flux_pipeline:
                 pipeline_kwargs["output_type"] = "latent"  # Request latent output - we'll manually decode
             else:
                 print(f"[SDNQ Sampler] ℹ️  Flux pipeline detected - using direct image output (latent output not compatible)")
@@ -1169,6 +1198,21 @@ class SDNQSampler:
             # Check for interruption after generation (catches both callback and manual interrupts)
             if self.check_interrupted():
                 raise InterruptedError("Generation interrupted by user")
+
+            # Handle video pipeline output (result.frames[0] is list of PIL images)
+            # Video pipelines return frames instead of images
+            if is_video_pipeline and hasattr(result, 'frames') and result.frames is not None:
+                video_frames = result.frames[0]  # First batch
+                if isinstance(video_frames, list) and len(video_frames) > 0:
+                    # Return first frame as the image for ComfyUI IMAGE output
+                    # Store all frames in _video_frames for potential VIDEO output
+                    image = video_frames[0]
+                    self._video_frames = video_frames  # Store for later retrieval
+                    print(f"[SDNQ Sampler] Video generated! {len(video_frames)} frames, first frame: {image.size}")
+                    print(f"[SDNQ Sampler] ℹ️  Latent output not available for video pipelines")
+                    return image, None
+                else:
+                    raise RuntimeError("Video pipeline returned empty frames")
 
             # Check if result has images/latents (may be empty if interrupted)
             if not hasattr(result, 'images') or result.images is None:
@@ -1329,7 +1373,8 @@ class SDNQSampler:
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
                 use_quantized_matmul: bool = True,
                 image1=None, image2=None, image3=None, image4=None,
-                image_resize: str = "No Resize") -> Tuple[torch.Tensor]:
+                image_resize: str = "No Resize",
+                num_frames: int = 1) -> Tuple[torch.Tensor]:
         """
         Main generation function called by ComfyUI.
 
@@ -1360,10 +1405,11 @@ class SDNQSampler:
             image3: Optional third image for multi-image editing
             image4: Optional fourth image for multi-image editing
             image_resize: Resize option for input images
+            num_frames: Number of frames for video models (1 = image, >1 = video)
 
         Returns:
             Tuple containing (IMAGE, LATENT) in ComfyUI format:
-            - IMAGE: Generated image as tensor [1, H, W, 3]
+            - IMAGE: Generated image as tensor [1, H, W, 3] or [N, H, W, 3] for video
             - LATENT: Dict with "samples" key containing latent tensor [1, C, H, W]
                       If latent output unavailable, contains placeholder zeros
 
@@ -1377,6 +1423,18 @@ class SDNQSampler:
         print(f"{'='*60}\n")
 
         self.interrupted = False
+        self._video_frames = None  # Reset video frame cache
+
+        # Determine if this is a video model based on registry type
+        model_info = get_model_info(model_selection)
+        model_type = model_info.get("type", "") if model_info else ""
+        is_video_model = model_type in ["LTX2", "Wan"]  # Video model types
+
+        if is_video_model and num_frames <= 1:
+            print(f"[SDNQ Sampler] ⚠️  Video model selected but num_frames=1. Generating single frame.")
+        elif not is_video_model and num_frames > 1:
+            print(f"[SDNQ Sampler] ⚠️  Image model selected but num_frames={num_frames}. Using num_frames=1.")
+            num_frames = 1
 
         try:
             # Step 1: Load or download model
@@ -1492,7 +1550,7 @@ class SDNQSampler:
                         source_images.append(pil_img)
                         print(f"[SDNQ Sampler] Added source image {idx}: {pil_img.size}")
 
-            # Step 4: Generate image (returns both image and latents)
+            # Step 4: Generate image/video (returns both image and latents)
             pil_image, latents = self.generate_image(
                 self.pipeline,
                 prompt,
@@ -1502,11 +1560,23 @@ class SDNQSampler:
                 width,
                 height,
                 seed,
-                source_images=source_images if source_images else None
+                source_images=source_images if source_images else None,
+                num_frames=num_frames
             )
 
             # Step 5: Convert to ComfyUI format
-            comfy_tensor = self.pil_to_comfy_tensor(pil_image)
+            # For video models with multiple frames, convert all frames to batched tensor
+            if hasattr(self, '_video_frames') and self._video_frames and len(self._video_frames) > 1:
+                # Convert all video frames to ComfyUI batch tensor [N, H, W, C]
+                frame_tensors = []
+                for frame in self._video_frames:
+                    frame_tensor = self.pil_to_comfy_tensor(frame)
+                    frame_tensors.append(frame_tensor)
+                comfy_tensor = torch.cat(frame_tensors, dim=0)
+                print(f"[SDNQ Sampler] Video converted to batch tensor: shape={comfy_tensor.shape}")
+                self._video_frames = None  # Clear the cached frames
+            else:
+                comfy_tensor = self.pil_to_comfy_tensor(pil_image)
 
             # Step 6: Convert latents to ComfyUI LATENT format
             # ComfyUI LATENT is a dict with "samples" key containing tensor [B, C, H, W]

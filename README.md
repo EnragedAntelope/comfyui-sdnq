@@ -37,9 +37,13 @@ cd comfyui-sdnq && pip install -r requirements.txt
 
 ## Models
 
-20+ pre-quantized models available: FLUX, Qwen-Image, Z-Image, SD3, SDXL, and more.
+30+ pre-quantized models available: FLUX.1, FLUX.2, Qwen-Image (including 2512 Dec update), Z-Image, GLM-Image, LTX-2 video, and more.
 
 Browse all models: [Disty0's SDNQ Collection](https://huggingface.co/collections/Disty0/sdnq)
+
+### Video Models (Experimental)
+
+LTX-2 video models are now supported. Set `num_frames` > 1 for video generation. Output is a batch of images (frames) that can be connected to video export nodes.
 
 ## Performance
 
@@ -57,6 +61,12 @@ Triton enables optimized quantized matmul operations. Enabled by default when av
 ```bash
 pip install --upgrade transformers diffusers
 ```
+
+**Newest models (FLUX.2-klein, GLM-Image, Qwen-Image-2512, LTX-2)** → Build diffusers from source:
+```bash
+pip install git+https://github.com/huggingface/diffusers.git
+```
+This ensures you have the latest pipeline support for cutting-edge models.
 
 **Out of memory** → Try `balanced` or `lowvram` memory mode, or use uint4 models.
 
