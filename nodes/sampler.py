@@ -156,6 +156,9 @@ class SDNQSampler:
         self.current_dtype = None
         self.current_memory_mode = None
         self.current_scheduler = None
+        # Multiple LoRA support - track up to 5 LoRAs
+        self.current_loras = {}  # Dict of {adapter_name: (path, strength)}
+        # Legacy single LoRA tracking (for backward compatibility)
         self.current_lora_path = None
         self.current_lora_strength = None
         # Performance optimization settings cache
@@ -335,7 +338,87 @@ class SDNQSampler:
                     "min": -5.0,
                     "max": 5.0,
                     "step": 0.05,
-                    "tooltip": "LoRA influence strength. 1.0 = full strength, 0.5 = half strength, 0.0 = disabled. Negative values invert the LoRA effect. Range: -5.0 to +5.0."
+                    "tooltip": "LoRA 1 influence strength. 1.0 = full strength, 0.5 = half strength, 0.0 = disabled. Negative values invert the LoRA effect. Range: -5.0 to +5.0."
+                }),
+
+                # ============================================================
+                # ADDITIONAL LORAs (Support for multiple LoRAs - Issue #57)
+                # ============================================================
+
+                "lora2_selection": (lora_list, {
+                    "default": "[None]",
+                    "tooltip": "Optional second LoRA. Select from ComfyUI loras folder or use [Custom Path]."
+                }),
+
+                "lora2_custom_path": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Custom path for LoRA 2 (only used when [Custom Path] is selected)."
+                }),
+
+                "lora2_strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -5.0,
+                    "max": 5.0,
+                    "step": 0.05,
+                    "tooltip": "LoRA 2 influence strength."
+                }),
+
+                "lora3_selection": (lora_list, {
+                    "default": "[None]",
+                    "tooltip": "Optional third LoRA. Select from ComfyUI loras folder or use [Custom Path]."
+                }),
+
+                "lora3_custom_path": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Custom path for LoRA 3 (only used when [Custom Path] is selected)."
+                }),
+
+                "lora3_strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -5.0,
+                    "max": 5.0,
+                    "step": 0.05,
+                    "tooltip": "LoRA 3 influence strength."
+                }),
+
+                "lora4_selection": (lora_list, {
+                    "default": "[None]",
+                    "tooltip": "Optional fourth LoRA. Select from ComfyUI loras folder or use [Custom Path]."
+                }),
+
+                "lora4_custom_path": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Custom path for LoRA 4 (only used when [Custom Path] is selected)."
+                }),
+
+                "lora4_strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -5.0,
+                    "max": 5.0,
+                    "step": 0.05,
+                    "tooltip": "LoRA 4 influence strength."
+                }),
+
+                "lora5_selection": (lora_list, {
+                    "default": "[None]",
+                    "tooltip": "Optional fifth LoRA. Select from ComfyUI loras folder or use [Custom Path]."
+                }),
+
+                "lora5_custom_path": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "Custom path for LoRA 5 (only used when [Custom Path] is selected)."
+                }),
+
+                "lora5_strength": ("FLOAT", {
+                    "default": 1.0,
+                    "min": -5.0,
+                    "max": 5.0,
+                    "step": 0.05,
+                    "tooltip": "LoRA 5 influence strength."
                 }),
 
                 # ============================================================
@@ -839,7 +922,7 @@ class SDNQSampler:
                 f"6. Look at the error message above for specific details"
             )
 
-    def load_lora(self, pipeline, lora_path: str, lora_strength: float = 1.0):
+    def load_lora(self, pipeline, lora_path: str, lora_strength: float = 1.0, adapter_name: str = "lora"):
         """
         Load LoRA weights into pipeline.
 
@@ -848,7 +931,8 @@ class SDNQSampler:
         Args:
             pipeline: Loaded diffusers pipeline
             lora_path: Path to LoRA file or HuggingFace repo ID
-            lora_strength: LoRA influence strength (0.0 to 2.0)
+            lora_strength: LoRA influence strength (-5.0 to +5.0)
+            adapter_name: Unique name for this adapter (for multiple LoRA support)
 
         Based on verified API from:
         https://huggingface.co/docs/diffusers/en/api/loaders/lora
@@ -857,10 +941,10 @@ class SDNQSampler:
         import os
 
         if not lora_path or lora_path.strip() == "":
-            print(f"[SDNQ Sampler] No LoRA specified, skipping...")
-            return
+            print(f"[SDNQ Sampler] No LoRA specified for {adapter_name}, skipping...")
+            return False
 
-        print(f"[SDNQ Sampler] Loading LoRA...")
+        print(f"[SDNQ Sampler] Loading LoRA ({adapter_name})...")
         print(f"[SDNQ Sampler]   Path: {lora_path}")
         print(f"[SDNQ Sampler]   Strength: {lora_strength}")
 
@@ -877,26 +961,21 @@ class SDNQSampler:
                 pipeline.load_lora_weights(
                     lora_dir,
                     weight_name=lora_file,
-                    adapter_name="lora"
+                    adapter_name=adapter_name
                 )
             else:
                 # Assume it's a HuggingFace repo ID
                 pipeline.load_lora_weights(
                     lora_path,
-                    adapter_name="lora"
+                    adapter_name=adapter_name
                 )
 
-            # Set LoRA strength
-            if lora_strength != 1.0:
-                pipeline.set_adapters(["lora"], adapter_weights=[lora_strength])
-            else:
-                pipeline.set_adapters(["lora"])
-
-            print(f"[SDNQ Sampler] ✓ LoRA loaded successfully")
+            print(f"[SDNQ Sampler] ✓ LoRA '{adapter_name}' loaded successfully")
+            return True
 
         except Exception as e:
             raise Exception(
-                f"Failed to load LoRA\n\n"
+                f"Failed to load LoRA '{adapter_name}'\n\n"
                 f"Error: {str(e)}\n\n"
                 f"LoRA path: {lora_path}\n\n"
                 f"Troubleshooting:\n"
@@ -907,16 +986,54 @@ class SDNQSampler:
                 f"5. Try with lora_strength=1.0 first"
             )
 
-    def unload_lora(self, pipeline):
+    def load_multiple_loras(self, pipeline, lora_configs: list):
         """
-        Unload LoRA weights from pipeline.
+        Load multiple LoRAs into pipeline and set their combined weights.
 
         Args:
-            pipeline: Pipeline with loaded LoRA
+            pipeline: Loaded diffusers pipeline
+            lora_configs: List of tuples (adapter_name, lora_path, strength)
+                         e.g., [("lora1", "/path/to/lora1.safetensors", 1.0), ...]
+
+        Returns:
+            Dict of successfully loaded LoRAs {adapter_name: (path, strength)}
+        """
+        loaded_loras = {}
+        adapter_names = []
+        adapter_weights = []
+
+        for adapter_name, lora_path, strength in lora_configs:
+            if lora_path and lora_path.strip():
+                try:
+                    success = self.load_lora(pipeline, lora_path, strength, adapter_name)
+                    if success:
+                        loaded_loras[adapter_name] = (lora_path, strength)
+                        adapter_names.append(adapter_name)
+                        adapter_weights.append(strength)
+                except Exception as e:
+                    print(f"[SDNQ Sampler] ⚠️  Failed to load LoRA '{adapter_name}': {e}")
+                    # Continue with other LoRAs instead of failing completely
+
+        # Set all adapters with their weights
+        if adapter_names:
+            try:
+                pipeline.set_adapters(adapter_names, adapter_weights=adapter_weights)
+                print(f"[SDNQ Sampler] ✓ {len(adapter_names)} LoRA(s) active: {adapter_names}")
+            except Exception as e:
+                print(f"[SDNQ Sampler] ⚠️  Failed to set adapter weights: {e}")
+
+        return loaded_loras
+
+    def unload_lora(self, pipeline):
+        """
+        Unload all LoRA weights from pipeline.
+
+        Args:
+            pipeline: Pipeline with loaded LoRA(s)
         """
         try:
             if hasattr(pipeline, 'unload_lora_weights'):
-                print(f"[SDNQ Sampler] Unloading previous LoRA...")
+                print(f"[SDNQ Sampler] Unloading all LoRA weights...")
                 pipeline.unload_lora_weights()
         except Exception as e:
             # Non-critical error, just log it
@@ -1370,6 +1487,10 @@ class SDNQSampler:
                 negative_prompt: str, steps: int, cfg: float, width: int, height: int,
                 seed: int, scheduler: str, dtype: str, memory_mode: str, auto_download: bool,
                 lora_selection: str = "[None]", lora_custom_path: str = "", lora_strength: float = 1.0,
+                lora2_selection: str = "[None]", lora2_custom_path: str = "", lora2_strength: float = 1.0,
+                lora3_selection: str = "[None]", lora3_custom_path: str = "", lora3_strength: float = 1.0,
+                lora4_selection: str = "[None]", lora4_custom_path: str = "", lora4_strength: float = 1.0,
+                lora5_selection: str = "[None]", lora5_custom_path: str = "", lora5_strength: float = 1.0,
                 use_xformers: bool = False, enable_vae_tiling: bool = False,
                 use_quantized_matmul: bool = True,
                 image1=None, image2=None, image3=None, image4=None,
@@ -1394,9 +1515,21 @@ class SDNQSampler:
             dtype: Data type string
             memory_mode: Memory management mode ("gpu", "balanced", "lowvram")
             auto_download: Whether to auto-download models
-            lora_selection: Selected LoRA from dropdown ([None], [Custom Path], or filename)
-            lora_custom_path: Custom LoRA path (used when [Custom Path] selected)
-            lora_strength: LoRA influence strength (-5.0 to +5.0)
+            lora_selection: Selected LoRA 1 from dropdown ([None], [Custom Path], or filename)
+            lora_custom_path: Custom LoRA 1 path (used when [Custom Path] selected)
+            lora_strength: LoRA 1 influence strength (-5.0 to +5.0)
+            lora2_selection: Selected LoRA 2 from dropdown
+            lora2_custom_path: Custom LoRA 2 path
+            lora2_strength: LoRA 2 influence strength
+            lora3_selection: Selected LoRA 3 from dropdown
+            lora3_custom_path: Custom LoRA 3 path
+            lora3_strength: LoRA 3 influence strength
+            lora4_selection: Selected LoRA 4 from dropdown
+            lora4_custom_path: Custom LoRA 4 path
+            lora4_strength: LoRA 4 influence strength
+            lora5_selection: Selected LoRA 5 from dropdown
+            lora5_custom_path: Custom LoRA 5 path
+            lora5_strength: LoRA 5 influence strength
             use_xformers: Enable xFormers memory-efficient attention (10-45% speedup)
             enable_vae_tiling: Enable VAE tiling for large images
             use_quantized_matmul: Enable Triton quantized matmul (uses torch.compile internally)
@@ -1471,63 +1604,86 @@ class SDNQSampler:
                 self.current_enable_vae_tiling = enable_vae_tiling
                 self.current_use_quantized_matmul = use_quantized_matmul
                 # Clear LoRA and scheduler cache when pipeline changes
+                self.current_loras = {}
                 self.current_lora_path = None
                 self.current_lora_strength = None
                 self.current_scheduler = None
             else:
                 print(f"[SDNQ Sampler] Using cached pipeline")
 
-            # Step 2.5: Handle LoRA loading/unloading
-            # Resolve actual LoRA path from lora_selection and lora_custom_path
-            lora_path = None
-            if lora_selection == "[None]":
-                lora_path = None
-            elif lora_selection == "[Custom Path]":
-                lora_path = lora_custom_path if lora_custom_path and lora_custom_path.strip() else None
-            else:
-                # User selected a LoRA from the dropdown
-                # Build full path from ComfyUI loras folder
-                if COMFYUI_AVAILABLE:
-                    try:
-                        lora_folders = folder_paths.get_folder_paths("loras")
-                        if lora_folders:
-                            # Try to find the file in lora folders
-                            for lora_folder in lora_folders:
-                                potential_path = os.path.join(lora_folder, lora_selection)
-                                if os.path.exists(potential_path):
-                                    lora_path = potential_path
-                                    break
-                            if not lora_path:
+            # Step 2.5: Handle multiple LoRA loading/unloading
+            # Helper function to resolve LoRA path from selection
+            def resolve_lora_path(selection, custom_path):
+                if selection == "[None]":
+                    return None
+                elif selection == "[Custom Path]":
+                    return custom_path if custom_path and custom_path.strip() else None
+                else:
+                    # User selected a LoRA from the dropdown
+                    if COMFYUI_AVAILABLE:
+                        try:
+                            lora_folders = folder_paths.get_folder_paths("loras")
+                            if lora_folders:
+                                for lora_folder in lora_folders:
+                                    potential_path = os.path.join(lora_folder, selection)
+                                    if os.path.exists(potential_path):
+                                        return potential_path
                                 # Fallback: use first folder + filename
-                                lora_path = os.path.join(lora_folders[0], lora_selection)
-                    except Exception as e:
-                        print(f"[SDNQ Sampler] Warning: Could not resolve LoRA path: {e}")
-                        lora_path = lora_selection  # Try using it as-is
+                                return os.path.join(lora_folders[0], selection)
+                        except Exception as e:
+                            print(f"[SDNQ Sampler] Warning: Could not resolve LoRA path: {e}")
+                            return selection
+                    return selection
+
+            # Build list of requested LoRAs
+            requested_loras = {}
+            lora_configs = [
+                ("lora1", lora_selection, lora_custom_path, lora_strength),
+                ("lora2", lora2_selection, lora2_custom_path, lora2_strength),
+                ("lora3", lora3_selection, lora3_custom_path, lora3_strength),
+                ("lora4", lora4_selection, lora4_custom_path, lora4_strength),
+                ("lora5", lora5_selection, lora5_custom_path, lora5_strength),
+            ]
+
+            for adapter_name, selection, custom_path, strength in lora_configs:
+                resolved_path = resolve_lora_path(selection, custom_path)
+                if resolved_path and resolved_path.strip():
+                    requested_loras[adapter_name] = (resolved_path, strength)
 
             # Check if LoRA configuration has changed
-            lora_changed = (lora_path != self.current_lora_path or
-                           lora_strength != self.current_lora_strength)
+            loras_changed = (requested_loras != self.current_loras)
 
-            if lora_path and lora_path.strip():
-                # User wants to use LoRA
-                if lora_changed:
-                    print(f"[SDNQ Sampler] LoRA configuration changed - updating...")
+            if requested_loras:
+                if loras_changed:
+                    print(f"[SDNQ Sampler] LoRA configuration changed - updating {len(requested_loras)} LoRA(s)...")
 
-                    # Unload previous LoRA if it exists
-                    if self.current_lora_path:
+                    # Unload all previous LoRAs
+                    if self.current_loras:
                         self.unload_lora(self.pipeline)
 
-                    # Load new LoRA
-                    self.load_lora(self.pipeline, lora_path, lora_strength)
-                    self.current_lora_path = lora_path
-                    self.current_lora_strength = lora_strength
+                    # Build config list for load_multiple_loras
+                    lora_config_list = [
+                        (name, path, strength)
+                        for name, (path, strength) in requested_loras.items()
+                    ]
+
+                    # Load all new LoRAs
+                    self.current_loras = self.load_multiple_loras(self.pipeline, lora_config_list)
+
+                    # Also update legacy single-lora tracking for backward compatibility
+                    if "lora1" in self.current_loras:
+                        self.current_lora_path, self.current_lora_strength = self.current_loras["lora1"]
+                    else:
+                        self.current_lora_path = None
+                        self.current_lora_strength = None
                 else:
-                    print(f"[SDNQ Sampler] Using cached LoRA: {lora_path}")
+                    print(f"[SDNQ Sampler] Using cached LoRA configuration ({len(self.current_loras)} LoRA(s))")
             else:
-                # User doesn't want LoRA, but we have one loaded
-                if self.current_lora_path:
-                    print(f"[SDNQ Sampler] Unloading LoRA...")
+                # User doesn't want any LoRAs, but we have some loaded
+                if self.current_loras:
+                    print(f"[SDNQ Sampler] Unloading all LoRAs...")
                     self.unload_lora(self.pipeline)
+                    self.current_loras = {}
                     self.current_lora_path = None
                     self.current_lora_strength = None
 
