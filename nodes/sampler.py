@@ -1407,10 +1407,24 @@ class SDNQSampler:
                         # Get scaling factor (different for different VAEs)
                         scaling_factor = getattr(pipeline.vae.config, 'scaling_factor', 0.18215)
 
-                        # Decode latents: scale back and decode
+                        # Get VAE dtype to ensure latents match (fixes dtype mismatch errors)
+                        # Error "Input type (float) and bias type (c10::Half) should be the same"
+                        # occurs when latents are float32 but VAE is float16
+                        try:
+                            vae_dtype = next(pipeline.vae.parameters()).dtype
+                        except StopIteration:
+                            # Fallback if VAE has no parameters (shouldn't happen)
+                            vae_dtype = latents.dtype
+
+                        # Log dtype info for debugging
+                        print(f"[SDNQ Sampler]   Latents dtype: {latents.dtype}, VAE dtype: {vae_dtype}")
+
+                        # Decode latents: cast to VAE dtype, scale back, and decode
                         with torch.no_grad():
+                            # Ensure latents match VAE dtype before decoding
+                            latents_scaled = latents.to(dtype=vae_dtype) / scaling_factor
                             decoded = pipeline.vae.decode(
-                                latents / scaling_factor,
+                                latents_scaled,
                                 return_dict=False
                             )[0]
 
