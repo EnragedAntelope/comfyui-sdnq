@@ -1186,29 +1186,75 @@ class SDNQSampler:
                 print(f"[SDNQ Sampler] ℹ️  Flux pipeline detected - using direct image output (latent output not compatible)")
 
             # Add image input for image editing pipelines (Qwen-Image-Edit, ChronoEdit, etc.)
-            # If source_images provided, this is img2img - don't set width/height (use source size)
-            # If no source_images, this is txt2img - set width/height
             # Note: pipeline_name and is_qwen_pipeline are computed earlier in this method
+            #
+            # IMPORTANT: Always pass width/height to ensure correct output resolution.
+            # FLUX.2 models require dimensions as multiples of 16.
+            # Other models typically require multiples of 8.
+            # See: https://docs.bfl.ml/flux_2/flux2_text_to_image
+            # Fix for Issue #59 - Klein 9B resolution cap
+
+            # Determine dimension alignment based on model type
+            # FLUX.2 models (including Klein) require multiples of 16
+            is_flux2 = "FLUX.2" in pipeline_name or "Flux2" in pipeline_name or "klein" in pipeline_name.lower()
+            dim_multiple = 16 if is_flux2 or is_flux_pipeline else 8
+
+            def align_dimension(dim: int, multiple: int) -> int:
+                """Round dimension down to nearest multiple."""
+                return (dim // multiple) * multiple
 
             if is_img2img:
                 # For single image, pass directly; for multiple, pass as list
                 if len(source_images) == 1:
                     pipeline_kwargs["image"] = source_images[0]
+                    # Use source image dimensions for output (rounded to proper multiple)
+                    src_width, src_height = source_images[0].size
                 else:
                     pipeline_kwargs["image"] = source_images
+                    # Use first image dimensions
+                    src_width, src_height = source_images[0].size
+
+                # Round dimensions to proper multiple and pass to pipeline
+                aligned_width = align_dimension(src_width, dim_multiple)
+                aligned_height = align_dimension(src_height, dim_multiple)
+
+                # Log if dimensions were adjusted
+                if aligned_width != src_width or aligned_height != src_height:
+                    print(f"[SDNQ Sampler] ℹ️  Adjusted output dimensions for {pipeline_name}:")
+                    print(f"[SDNQ Sampler]   Source: {src_width}x{src_height} → Output: {aligned_width}x{aligned_height}")
+                    print(f"[SDNQ Sampler]   (Dimensions must be multiples of {dim_multiple})")
+
+                pipeline_kwargs["width"] = aligned_width
+                pipeline_kwargs["height"] = aligned_height
+
             elif is_qwen_pipeline:
                 # Qwen/Edit pipelines require an image even for "T2I" mode
                 # Create a blank white image of the requested size as a starting point
                 # This allows the model to generate from scratch while satisfying the image requirement
+                aligned_width = align_dimension(width, dim_multiple)
+                aligned_height = align_dimension(height, dim_multiple)
+
+                if aligned_width != width or aligned_height != height:
+                    print(f"[SDNQ Sampler] ℹ️  Adjusted dimensions: {width}x{height} → {aligned_width}x{aligned_height}")
+
                 print(f"[SDNQ Sampler] ℹ️  {pipeline_name} requires an image input.")
-                print(f"[SDNQ Sampler] Creating blank {width}x{height} image for T2I mode...")
-                blank_image = Image.new("RGB", (width, height), color=(255, 255, 255))
+                print(f"[SDNQ Sampler] Creating blank {aligned_width}x{aligned_height} image for T2I mode...")
+                blank_image = Image.new("RGB", (aligned_width, aligned_height), color=(255, 255, 255))
                 pipeline_kwargs["image"] = blank_image
-                # Don't set width/height - let the pipeline use the image dimensions
+                # Also pass width/height to ensure correct output dimensions
+                pipeline_kwargs["width"] = aligned_width
+                pipeline_kwargs["height"] = aligned_height
             else:
-                # Text-to-image: specify output dimensions
-                pipeline_kwargs["width"] = width
-                pipeline_kwargs["height"] = height
+                # Text-to-image: specify output dimensions (aligned to proper multiple)
+                aligned_width = align_dimension(width, dim_multiple)
+                aligned_height = align_dimension(height, dim_multiple)
+
+                if aligned_width != width or aligned_height != height:
+                    print(f"[SDNQ Sampler] ℹ️  Adjusted dimensions for {pipeline_name}: {width}x{height} → {aligned_width}x{aligned_height}")
+                    print(f"[SDNQ Sampler]   (Dimensions must be multiples of {dim_multiple})")
+
+                pipeline_kwargs["width"] = aligned_width
+                pipeline_kwargs["height"] = aligned_height
 
             # Only add negative_prompt if it's not empty
             # Will be automatically removed if pipeline doesn't support it
