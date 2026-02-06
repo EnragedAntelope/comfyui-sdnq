@@ -9,6 +9,7 @@ functions to avoid slowing down ComfyUI startup. Imports happen on first use.
 """
 
 import os
+import sys
 import time
 from typing import Optional, Callable, Dict
 from pathlib import Path
@@ -35,8 +36,11 @@ def _get_hf_hub_funcs():
         }
     return _hf_hub_funcs
 
-# Disable symlink warnings on Windows (where symlinks require admin privileges)
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+# On Windows, symlinks require admin privileges which most users don't have.
+# Suppress the HF Hub warning about this since we use local_dir_use_symlinks=False
+# in snapshot_download anyway.
+if sys.platform == "win32":
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
 
 class DownloadProgress:
