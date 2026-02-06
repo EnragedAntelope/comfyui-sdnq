@@ -1,8 +1,18 @@
 [project]
 name = "comfyui-sdnq"
 description = "ComfyUI custom node pack for loading SDNQ quantized models"
-version = "1.5.3"
+version = "1.5.4"
 license = {file = "LICENSE"}
+dependencies = [
+    "sdnq>=0.1.0",
+    "diffusers>=0.36.0",
+    "huggingface-hub>=0.20.0",
+    "safetensors>=0.4.0",
+    "accelerate>=0.25.0",
+    # SDNQ models are multi-GB; HF XET protocol provides significantly faster
+    # downloads via chunked parallel transfers (often 5-10x over default HTTPS)
+    "hf-xet>=1.2.0",
+]
 
 [project.urls]
 Repository = "https://github.com/EnragedAntelope/comfyui-sdnq"

@@ -9,7 +9,7 @@ import os
 import sys
 import torch
 import gc
-import subprocess
+import shutil
 from typing import Tuple, Dict, Any, Optional
 
 # Import SDNQ config to register quantization methods with diffusers
@@ -40,17 +40,8 @@ def check_cpp_compiler_available() -> bool:
         # On Linux/Mac, gcc/clang usually available
         return True
 
-    try:
-        # Check if cl.exe (MSVC compiler) is available on Windows
-        result = subprocess.run(
-            ["cl"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=5
-        )
-        return True
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
+    # Check if cl.exe (MSVC compiler) is on PATH without spawning a subprocess
+    return shutil.which("cl") is not None
 
 
 class SDNQModelLoader:
