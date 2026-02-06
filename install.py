@@ -16,9 +16,11 @@ import os
 # Map of package import names to pip install names
 REQUIRED_PACKAGES = {
     "sdnq": "sdnq>=0.1.0",
+    "diffusers": "diffusers>=0.36.0",
     "huggingface_hub": "huggingface-hub>=0.20.0",
     "safetensors": "safetensors>=0.4.0",
     "accelerate": "accelerate>=0.25.0",
+    "hf_xet": "hf-xet>=1.2.0",
 }
 
 
