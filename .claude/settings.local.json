@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s https://api.github.com/repos/Disty0/sdnq/contents/sdnq/__init__.py)",
+      "Bash(curl -s https://api.github.com/repos/Disty0/sdnq/contents/requirements.txt)",
+      "Bash(curl -s https://api.github.com/repos/Disty0/sdnq/contents/sdnq/loader.py)",
+      "Bash(curl -s https://api.github.com/repos/Disty0/sdnq/contents/sdnq/config.py)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/sdnq/__init__.py\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/requirements.txt\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/sdnq/loader.py\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/sdnq/config.py\")",
+      "Bash(curl -s \"https://api.github.com/repos/Disty0/sdnq/branches\")",
+      "Bash(curl -s \"https://api.github.com/repos/Disty0/sdnq/contents/\")",
+      "Bash(curl -s \"https://api.github.com/repos/Disty0/sdnq/contents/src\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/src/sdnq/__init__.py\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/pyproject.toml\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/src/sdnq/quantizer.py\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/src/sdnq/loader.py\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/src/sdnq/common.py\")",
+      "Bash(curl -s \"https://api.github.com/repos/Disty0/sdnq/commits?per_page=30&since=2026-03-01\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/Disty0/sdnq/main/README.md\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('core/registry.py'\\).read\\(\\)\\); print\\('registry.py: syntax OK'\\)\")"
+    ]
+  }
+}

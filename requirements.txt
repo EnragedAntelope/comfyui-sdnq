@@ -8,7 +8,7 @@
 #   pip install --upgrade diffusers
 
 # SDNQ quantization engine (includes diffusers as a dependency)
-sdnq>=0.1.0
+sdnq>=0.1.7
 
 # Diffusers pipeline API
 diffusers>=0.36.0

@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Catalog of pre-quantized SDNQ models from Disty0's HuggingFace collection
 # All entries verified against https://huggingface.co/collections/Disty0/sdnq
-# Last updated: 2026-01-15
+# Last updated: 2026-04-12
 #
 # Model Types:
 #   - FLUX, FLUX2: FLUX.1 and FLUX.2 text-to-image models
@@ -119,8 +119,9 @@ SDNQ_MODEL_CATALOG = {
         "description": "Qwen-Image-Edit 4-bit SVD - Image-to-Image",
         "priority": 13
     },
-    # NOTE: Qwen3-VL-32B-Instruct is a VLM (Vision-Language Model) that outputs TEXT, not images.
-    # It requires transformers library, not diffusers, and needs a separate node implementation.
+    # NOTE: Disty0/Qwen3-VL-32B-Instruct-SDNQ-uint4-svd-r32 is a VLM (Vision-Language Model)
+    # that outputs TEXT, not images. It is intentionally excluded from this catalog.
+    # Requires transformers library, not diffusers.
     # See docs/VLM_SUPPORT_NOTES.md for implementation details if VLM support is added later.
 
     # Z-Image Models - Latest addition (2025)

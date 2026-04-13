@@ -216,13 +216,12 @@ def load_sdnq_model(model_path, dtype_str, use_quantized_matmul):
 
 ```txt
 # requirements.txt
-sdnq @ git+https://github.com/Disty0/sdnq.git
-diffusers>=0.30.0
-transformers>=4.40.0
+sdnq>=0.1.7
+diffusers>=0.36.0
 huggingface-hub>=0.20.0
 safetensors>=0.4.0
-torch>=2.0.0
 accelerate>=0.25.0
+hf-xet>=1.2.0
 ```
 
 ---

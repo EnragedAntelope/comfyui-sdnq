@@ -9,7 +9,7 @@ Run large models like FLUX.2, FLUX.1, SD3.5, Qwen-Image, and more on consumer ha
 ## Features
 
 - **All-in-one node** - Select model, enter prompt, generate
-- **20+ pre-configured models** with auto-download from HuggingFace
+- **30 pre-configured models** with auto-download from HuggingFace
 - **50-75% VRAM savings** with SDNQ quantization
 - **Memory modes**: GPU (fastest), balanced (12-16GB), lowvram (8GB)
 - **LoRA support**, image editing, 14 schedulers

@@ -4,13 +4,35 @@
 
 ## Project Status
 
-**Current Phase**: STANDALONE SAMPLER IMPLEMENTATION (Option A)
-**Last Updated**: 2025-12-09 (Session continues)
-**Overall Progress**: Implementation complete, ready for testing
+**Current Phase**: PRODUCTION / MAINTENANCE
+**Last Updated**: 2026-04-12
+**Version**: 1.5.4
+**Overall Progress**: Production-ready. 30 SDNQ models in catalog. ~1839 lines in sampler.py.
 
-✅ **ARCHITECTURAL REDESIGN IN PROGRESS** ✅
+✅ **IMPLEMENTATION COMPLETE** ✅
 
-After completing reality check and research, implementing standalone sampler node as recommended in ASSESSMENT.md Option A.
+Standalone sampler node (SDNQSampler) is fully implemented and production-ready.
+
+### Upstream Review — 2026-04-12
+
+Performed a full review of the sdnq library (v0.1.7) and the HuggingFace SDNQ collection.
+
+**Model Catalog**: All 28 image generation models and 2 video models from the HuggingFace SDNQ
+collection are present in our catalog. The only model not included is
+`Disty0/Qwen3-VL-32B-Instruct-SDNQ-uint4-svd-r32`, which is a VLM (text output) and correctly
+excluded. Two legacy models (`FLUX.1-dev-qint8`, `FLUX.1-dev-qint4`) predate the SDNQ naming
+convention but remain valid.
+
+**SDNQ API**: All v0.1.0→v0.1.7 changes are transparent runtime improvements (AMD RDNA2 Triton
+kernels, Intel Arc GPU support, memory-efficient large batch matmul). Our API usage is verified
+correct and backward compatible. No code changes required in sampler.py.
+
+**Actions taken**: Updated catalog date, VLM exclusion note (with specific SDNQ repo ID), and
+bumped `sdnq>=0.1.7` in requirements.txt and pyproject.toml.
+
+---
+
+### Original Implementation (2025-12-09)
 
 ### What's Been Done (This Session)
 
