@@ -1,5 +1,9 @@
 # ComfyUI-SDNQ
 
+> **Deprecated - no longer maintained.** This repository is archived. Issues and
+> pull requests are not being accepted, and no fixes or new model support will be
+> released. Existing installs keep working as they are; feel free to fork.
+
 **Load and run SDNQ quantized models in ComfyUI with 50-75% VRAM savings!**
 
 Run large models like FLUX.2, FLUX.1, SD3.5, Qwen-Image, and more on consumer hardware with significantly reduced VRAM requirements.
